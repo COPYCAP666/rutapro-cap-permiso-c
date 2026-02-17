@@ -1,13 +1,13 @@
 # 🚛 RutaPro — Plataforma CAP & Permiso C
 
-[![GitHub Pages](https://img.shields.io/badge/Deploy-GitHub%20Pages-222?style=for-the-badge&logo=github)](https://tretoef-estrella.github.io/rutapro-cap-permiso-c/)
-[![License](https://img.shields.io/badge/License-All%20Rights%20Reserved-red.svg?style=for-the-badge)](LICENSE)
+[![GitHub Pages](https://img.shields.io/badge/Deploy-GitHub%20Pages-222?style=for-the-badge&logo=github)](https://copycap666.github.io/rutapro-cap-permiso-c/)
+[![License](https://img.shields.io/badge/License-All%20Rights%20Reserved-red.svg?style=for-the-badge)](LICENSE.md)
 [![HTML5](https://img.shields.io/badge/HTML5-Single%20File-E34F26?style=for-the-badge&logo=html5&logoColor=white)]()
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)]()
 
 > **Plataforma interactiva de estudio para el CAP de Mercancías y Permiso C con repetición espaciada, gamificación y recursos de élite.**
 
-🔗 **Link en vivo:** [https://tretoef-estrella.github.io/rutapro-cap-permiso-c/](https://tretoef-estrella.github.io/rutapro-cap-permiso-c/)
+🔗 **Link en vivo:** [https://copycap666.github.io/rutapro-cap-permiso-c/](https://copycap666.github.io/rutapro-cap-permiso-c/)
 
 ---
 
@@ -41,7 +41,7 @@ Toda la base de conocimiento está extraída de fuentes oficiales:
 
 1. **Haz Fork** de este repositorio o clónalo:
    ```bash
-   git clone https://github.com/tretoef-estrella/rutapro-cap-permiso-c.git
+   git clone https://github.com/COPYCAP666/rutapro-cap-permiso-c.git
    ```
 2. Sube el repositorio a tu cuenta de GitHub.
 3. Ve a **Settings → Pages → Source** y selecciona la rama `main` y la carpeta `/ (root)`.
@@ -120,7 +120,7 @@ Todo en un solo archivo `index.html`, sin dependencias locales:
 
 ## 🏷 Tags
 
-`cap-mercancias` · `permiso-c` · `permiso-c1` · `dgt` · `examen-camion` · `conduccion-profesional` · `repeticion-espaciada` · `srs` · `estudio-interactivo` · `transportes` · `tmvi03` · `tmvi21` · `rvp-2024` · `tacografo` · `tiempos-conduccion` · `github-pages` · `single-file` · `react` · `proyecto-estrella`
+`cap-mercancias` · `permiso-c` · `permiso-c1` · `dgt` · `examen-camion` · `conduccion-profesional` · `repeticion-espaciada` · `srs` · `estudio-interactivo` · `transportes` · `tmvi03` · `tmvi21` · `rvp-2024` · `tacografo` · `tiempos-conduccion` · `github-pages` · `single-file` · `react` · `copycap666`
 
 ---
 
@@ -138,13 +138,13 @@ Todo en un solo archivo `index.html`, sin dependencias locales:
 
 ## 📜 Licencia
 
-**© 2026 tretoef-estrella · Todos los derechos reservados.**
+**© 2026 COPYCAP666 · Todos los derechos reservados.**
 
-Este proyecto está protegido bajo copyright. No se permite copiar, modificar, distribuir ni utilizar con fines comerciales sin autorización expresa por escrito del autor. Consulta el archivo [LICENSE](LICENSE) para los términos completos.
+Este proyecto está protegido bajo copyright. No se permite copiar, modificar, distribuir ni utilizar con fines comerciales sin autorización expresa por escrito del autor. Consulta el archivo [LICENSE.md](LICENSE.md) para los términos completos.
 
 ---
 
 <p align="center">
-  <b>Proyecto Estrella</b> · <a href="https://github.com/tretoef-estrella">tretoef-estrella</a><br/>
-  <em>Construyendo puentes, no muros.</em>
+  <a href="https://github.com/COPYCAP666">COPYCAP666</a><br/>
+  <em>RutaPro — Estudia, aprueba, conduce.</em>
 </p>
