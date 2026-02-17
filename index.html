@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RutaPro · Plataforma CAP & Permiso C</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        display: ['"JetBrains Mono"', 'monospace'],
+        body: ['"DM Sans"', 'sans-serif'],
+      },
+      colors: {
+        asphalt: { 50:'#f7f7f8', 100:'#eeeef0', 200:'#d9d9de', 300:'#b5b5bf', 400:'#8e8e9b', 500:'#717180', 600:'#5b5b68', 700:'#4a4a55', 800:'#404048', 900:'#38383e', 950:'#1c1c1f' },
+        signal: { amber:'#F59E0B', red:'#EF4444', green:'#10B981', blue:'#3B82F6' },
+        road: { yellow:'#FBBF24', white:'#F8FAFC', orange:'#F97316' }
+      }
+    }
+  }
+}
+</script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'DM Sans', sans-serif; background: #0f0f12; color: #e4e4e7; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #1c1c1f; }
+  ::-webkit-scrollbar-thumb { background: #404048; border-radius: 3px; }
+
+  @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+  @keyframes pulse-glow { 0%,100% { box-shadow: 0 0 20px rgba(251,191,36,0.15); } 50% { box-shadow: 0 0 40px rgba(251,191,36,0.3); } }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+  @keyframes confetti { 0%{transform:scale(0) rotate(0)} 50%{transform:scale(1.3) rotate(180deg)} 100%{transform:scale(1) rotate(360deg)} }
+
+  .animate-slide-up { animation: slideUp 0.5s ease-out forwards; }
+  .animate-fade { animation: fadeIn 0.4s ease-out; }
+  .animate-shake { animation: shake 0.4s ease; }
+  .animate-confetti { animation: confetti 0.5s ease-out; }
+  .glow-card { animation: pulse-glow 3s ease-in-out infinite; }
+  .glass { background: rgba(28,28,31,0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.06); }
+  .danger-badge { background: linear-gradient(135deg, #991b1b, #dc2626); }
+  .road-stripe { background: repeating-linear-gradient(90deg, #FBBF24 0px, #FBBF24 40px, transparent 40px, transparent 60px); height: 3px; }
+  .progress-ring { transition: stroke-dashoffset 0.6s ease; }
+
+  .option-btn { transition: all 0.2s ease; border: 2px solid rgba(255,255,255,0.08); }
+  .option-btn:hover { border-color: rgba(251,191,36,0.4); background: rgba(251,191,36,0.05); }
+  .option-btn.correct { border-color: #10B981 !important; background: rgba(16,185,129,0.12) !important; }
+  .option-btn.wrong { border-color: #EF4444 !important; background: rgba(239,68,68,0.12) !important; }
+  .option-btn.selected { border-color: #FBBF24; background: rgba(251,191,36,0.1); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ─── ICONS (inline SVG) ───
+const Icons = {
+  Home: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>,
+  Play: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>,
+  Book: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>,
+  Chart: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>,
+  AlertTriangle: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>,
+  Download: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>,
+  Upload: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>,
+  Trophy: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>,
+  Flame: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>,
+  Check: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>,
+  X: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
+  Truck: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 13.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>,
+  RefreshCw: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>,
+  Clock: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+  Shield: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>,
+  Weight: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="3"/><path d="M6.5 8a2 2 0 0 0-1.905 1.46L2.1 18.23A2 2 0 0 0 4 21h16a2 2 0 0 0 1.925-2.54L19.4 9.46A2 2 0 0 0 17.48 8Z"/></svg>,
+  Zap: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>,
+  Globe: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>,
+  ExternalLink: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>,
+  GraduationCap: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></svg>,
+  FileText: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>,
+  Monitor: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>,
+  Sparkles: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||20} height={p.size||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>,
+};
+
+// ─── QUESTION DATABASE (40 questions from PDFs) ───
+const QUESTIONS = [
+  // ── TACÓGRAFO (Zona de Peligro) ──
+  { id:1, category:"Tacógrafo", danger:true, q:"¿Qué reglamento europeo regula los tiempos de conducción y descanso de los conductores profesionales?", options:["Reglamento (CE) 561/2006","Reglamento (UE) 165/2014","Reglamento (CEE) 3821/85","Directiva 2006/22/CE"], correct:0, explanation:"El Reglamento (CE) 561/2006 establece las normas sobre tiempos de conducción, pausas y períodos de descanso." },
+  { id:2, category:"Tacógrafo", danger:true, q:"¿Qué reglamento regula específicamente el aparato tacógrafo digital?", options:["Reglamento (UE) 165/2014","Reglamento (CE) 561/2006","Real Decreto 1032/2007","Directiva 2007/46/CE"], correct:0, explanation:"El Reglamento (UE) 165/2014 sustituye al antiguo 3821/85 y regula el tacógrafo digital." },
+  { id:3, category:"Tacógrafo", danger:true, q:"Tras 4 horas y media de conducción continuada, el conductor DEBE realizar una pausa de al menos:", options:["30 minutos","45 minutos","15 minutos","60 minutos"], correct:1, explanation:"Según el Reglamento 561/2006, tras 4,5 horas de conducción se exige una pausa mínima de 45 minutos." },
+  { id:4, category:"Tacógrafo", danger:true, q:"¿Cuál es el tiempo máximo de conducción diaria según el Reglamento 561/2006?", options:["8 horas","9 horas, ampliable a 10 horas dos veces por semana","10 horas siempre","12 horas"], correct:1, explanation:"El límite diario es de 9 horas, pudiendo ampliarse a 10 horas un máximo de dos veces por semana." },
+  { id:5, category:"Tacógrafo", danger:true, q:"¿Cuál es el tiempo máximo de conducción semanal?", options:["48 horas","56 horas","60 horas","45 horas"], correct:1, explanation:"El tiempo máximo de conducción semanal es de 56 horas, sin superar 90 horas en dos semanas consecutivas." },
+  { id:6, category:"Tacógrafo", danger:true, q:"El descanso diario normal del conductor es de al menos:", options:["9 horas","10 horas","11 horas ininterrumpidas","8 horas"], correct:2, explanation:"El descanso diario normal es de al menos 11 horas ininterrumpidas dentro de cada período de 24 horas." },
+  { id:7, category:"Tacógrafo", danger:true, q:"¿Qué sanción conlleva la manipulación fraudulenta del tacógrafo?", options:["Sanción leve","Sanción grave","Sanción muy grave","Solo una advertencia"], correct:2, explanation:"La manipulación fraudulenta del tacógrafo se considera infracción muy grave según la normativa." },
+
+  // ── MASAS Y DIMENSIONES (Zona de Peligro) ──
+  { id:8, category:"Masas y Dimensiones", danger:true, q:"¿Cuál es la masa máxima autorizada (MMA) de un camión rígido de 2 ejes?", options:["16 toneladas","18 toneladas","26 toneladas","12 toneladas"], correct:1, explanation:"Según el Anexo IX del Reglamento General de Vehículos, un camión de 2 ejes tiene una MMA de 18 toneladas." },
+  { id:9, category:"Masas y Dimensiones", danger:true, q:"Un camión rígido de 3 ejes tiene una MMA general de:", options:["25 toneladas","26 toneladas","32 toneladas","18 toneladas"], correct:0, explanation:"La MMA general es 25 t, ampliable a 26 t con eje motor con neumáticos dobles y suspensión neumática." },
+  { id:10, category:"Masas y Dimensiones", danger:true, q:"¿Cuál es la longitud máxima permitida de un camión rígido (incluida la carga)?", options:["10 metros","12 metros","16,50 metros","18,75 metros"], correct:1, explanation:"La longitud máxima de un camión rígido, incluida la carga, es de 12 metros." },
+  { id:11, category:"Masas y Dimensiones", danger:true, q:"¿Cuál es la anchura máxima general de un camión?", options:["2,50 m","2,55 m","2,60 m","3,00 m"], correct:1, explanation:"La anchura máxima general es 2,55 m. Los vehículos acondicionados (isotermos) pueden alcanzar 2,60 m." },
+  { id:12, category:"Masas y Dimensiones", danger:true, q:"La altura máxima general de un camión, incluida la carga, es de:", options:["3,50 metros","4,00 metros","4,50 metros","5,00 metros"], correct:1, explanation:"Como norma general, la altura máxima es de 4,00 m. Portavehículos y auxilio en carretera pueden llegar a 4,50 m." },
+  { id:13, category:"Masas y Dimensiones", danger:true, q:"¿Cuál es la masa máxima por eje simple motor?", options:["10 toneladas","11,5 toneladas","13 toneladas","8 toneladas"], correct:1, explanation:"El eje simple motor tiene una masa máxima de 11,5 toneladas." },
+
+  // ── TIEMPOS DE CONDUCCIÓN (Zona de Peligro) ──
+  { id:14, category:"Tiempos de Conducción", danger:true, q:"¿Cuántas horas como máximo se puede conducir en dos semanas consecutivas?", options:["90 horas","96 horas","112 horas","80 horas"], correct:0, explanation:"El máximo acumulado en dos semanas consecutivas es de 90 horas de conducción." },
+  { id:15, category:"Tiempos de Conducción", danger:true, q:"El descanso semanal normal tiene una duración mínima de:", options:["24 horas","36 horas","45 horas","48 horas"], correct:2, explanation:"El descanso semanal normal es de al menos 45 horas consecutivas." },
+  { id:16, category:"Tiempos de Conducción", danger:true, q:"La pausa de 45 minutos tras 4,5 horas de conducción puede dividirse en:", options:["Dos pausas de 22,5 min","Una de 15 min seguida de otra de 30 min","Una pausa de 20 min y otra de 25 min","No puede dividirse"], correct:1, explanation:"Puede dividirse en una primera pausa de al menos 15 minutos y una segunda de al menos 30 minutos." },
+
+  // ── CATEGORÍAS DE VEHÍCULOS ──
+  { id:17, category:"Categorías de Vehículos", danger:false, q:"Los vehículos de categoría N son aquellos concebidos para:", options:["Transporte de personas","Transporte de mercancías","Remolques","Vehículos especiales"], correct:1, explanation:"La categoría N agrupa los vehículos de motor concebidos y fabricados principalmente para el transporte de mercancías." },
+  { id:18, category:"Categorías de Vehículos", danger:false, q:"Un vehículo de categoría N2 tiene una masa máxima:", options:["No superior a 3,5 t","Superior a 3,5 t pero no a 12 t","Superior a 12 t","Superior a 7,5 t pero no a 16 t"], correct:1, explanation:"N2 = masa máxima superior a 3,5 t pero no superior a 12 t." },
+  { id:19, category:"Categorías de Vehículos", danger:false, q:"Un remolque de categoría O4 tiene una masa máxima:", options:["Superior a 3,5 t pero no a 10 t","Superior a 10 toneladas","No superior a 0,75 t","Superior a 0,75 t pero no a 3,5 t"], correct:1, explanation:"O4 = remolques con masa máxima superior a 10 toneladas." },
+  { id:20, category:"Categorías de Vehículos", danger:false, q:"¿Qué categoría corresponde a un vehículo N1?", options:["Camión pesado MMA > 12 t","Vehículo de mercancías MMA ≤ 3,5 t","Autobús con más de 8 plazas","Remolque ligero"], correct:1, explanation:"N1 = vehículos para transporte de mercancías con MMA no superior a 3,5 toneladas." },
+
+  // ── SISTEMAS DE SEGURIDAD ──
+  { id:21, category:"Sistemas de Seguridad", danger:false, q:"¿Qué sistema evita el bloqueo de las ruedas durante la frenada?", options:["ESP","ABS","ASR","ACC"], correct:1, explanation:"El ABS (Sistema Antibloqueo de Frenado) evita que las ruedas se bloqueen al frenar." },
+  { id:22, category:"Sistemas de Seguridad", danger:false, q:"¿Qué significa ESP en un vehículo industrial?", options:["Sistema de control de tracción","Sistema de estabilización del vehículo","Sistema de repartición de frenada","Sistema regulador de velocidad"], correct:1, explanation:"ESP = Electronic Stability Program, sistema de estabilización electrónica del vehículo." },
+  { id:23, category:"Sistemas de Seguridad", danger:false, q:"El sistema AEBS (Advanced Emergency Braking System) se activa para:", options:["Controlar la tracción en curvas","Repartir la frenada entre ejes","Realizar frenada de emergencia automática ante obstáculo","Regular la velocidad de crucero"], correct:2, explanation:"El AEBS es el sistema avanzado de frenado de urgencia que frena automáticamente ante una colisión inminente." },
+  { id:24, category:"Sistemas de Seguridad", danger:false, q:"¿Qué función cumple el sistema EBS?", options:["Estabilización electrónica","Repartición electrónica de frenada entre ejes","Control de la tracción","Frenado antibloqueo"], correct:1, explanation:"El EBS (Electronic Braking System) reparte electrónicamente la frenada entre los diferentes ejes del vehículo." },
+  { id:25, category:"Sistemas de Seguridad", danger:false, q:"El ASR (Anti-Slip Regulation) es un sistema de:", options:["Control de tracción","Frenado de emergencia","Estabilidad en curva","Gestión de carril"], correct:0, explanation:"El ASR controla la tracción, evitando que las ruedas motrices patinen al acelerar." },
+
+  // ── CAP ──
+  { id:26, category:"CAP", danger:false, q:"¿Cuál es la duración total de la cualificación inicial ordinaria del CAP para mercancías?", options:["140 horas","200 horas","244 horas","280 horas"], correct:2, explanation:"Según el programa TMVI21, la cualificación inicial ordinaria del CAP tiene una duración de 244 horas." },
+  { id:27, category:"CAP", danger:false, q:"¿Qué Real Decreto regula actualmente la cualificación inicial y formación continua del CAP?", options:["RD 1032/2007","RD 284/2021","RD 818/2009","RD 2484/1994"], correct:1, explanation:"El Real Decreto 284/2021 regula actualmente la cualificación inicial y formación continua del CAP." },
+  { id:28, category:"CAP", danger:false, q:"La evaluación del CAP se expresa en términos de:", options:["Numérica del 1 al 10","Apto / No Apto","Aprobado / Suspenso con nota","Porcentaje de aciertos"], correct:1, explanation:"La puntuación final del CAP se expresa en términos de Apto / No Apto." },
+  { id:29, category:"CAP", danger:false, q:"¿Cuántas horas de conducción efectiva incluye el módulo de optimización de consumo de carburante del CAP?", options:["2 horas","3 horas","4 horas","5 horas"], correct:2, explanation:"Según el programa TMVI21, la parte de optimización de consumo incluye 4 horas de conducción efectiva." },
+
+  // ── PERMISOS DE CONDUCCIÓN ──
+  { id:30, category:"Permisos", danger:false, q:"El permiso de conducción C1 habilita para conducir vehículos de mercancías con MMA:", options:["Superior a 3.500 kg hasta 7.500 kg","Superior a 7.500 kg","Hasta 3.500 kg","Sin límite de masa"], correct:0, explanation:"El permiso C1 cubre vehículos cuya MMA es superior a 3.500 kg pero no excede de 7.500 kg." },
+  { id:31, category:"Permisos", danger:false, q:"¿Qué edad mínima se requiere para obtener el permiso C?", options:["18 años","21 años","23 años","25 años"], correct:1, explanation:"Se requiere tener 21 años cumplidos para obtener el permiso C." },
+  { id:32, category:"Permisos", danger:false, q:"El permiso C+E habilita para conducir:", options:["Solo camiones rígidos","Conjuntos de vehículo C + remolque de MMA > 750 kg","Solo vehículos articulados de hasta 7,5 t","Autobuses articulados"], correct:1, explanation:"C+E permite conducir un vehículo de categoría C con un remolque cuya MMA supere los 750 kg." },
+
+  // ── CADENA CINEMÁTICA ──
+  { id:33, category:"Cadena Cinemática", danger:false, q:"¿Dónde se encuentra la zona óptima de utilización del cuentarrevoluciones para ahorrar combustible?", options:["En la zona roja (máximas RPM)","En la zona verde (par máximo)","Por debajo de ralentí","En punto muerto"], correct:1, explanation:"La zona verde del cuentarrevoluciones corresponde al par máximo del motor, donde el consumo es más eficiente." },
+  { id:34, category:"Cadena Cinemática", danger:false, q:"¿Qué son los ralentizadores en un camión?", options:["Sistemas de aceleración rápida","Sistemas de frenado secundario/retardación","Reguladores de temperatura","Sistemas de dirección asistida"], correct:1, explanation:"Los ralentizadores son sistemas de frenado secundario que ayudan a retardar el vehículo sin usar los frenos de servicio." },
+
+  // ── CARGA Y ESTIBA ──
+  { id:35, category:"Carga y Estiba", danger:false, q:"¿Qué consecuencia tiene la sobrecarga por eje?", options:["Solo mayor consumo de combustible","Inestabilidad del vehículo, desgaste irregular y sanción","Mejora la tracción","No afecta a la conducción"], correct:1, explanation:"La sobrecarga por eje compromete la estabilidad, produce desgaste irregular de neumáticos y conlleva sanciones." },
+  { id:36, category:"Carga y Estiba", danger:false, q:"El centro de gravedad de la carga debe situarse:", options:["Lo más alto posible","Lo más bajo y centrado posible","En la parte trasera","No importa su posición"], correct:1, explanation:"Un centro de gravedad bajo y centrado mejora la estabilidad del vehículo y reduce el riesgo de vuelco." },
+  { id:37, category:"Carga y Estiba", danger:false, q:"Las correas de estiba deben verificarse:", options:["Solo al cargar","Antes de cada viaje y periódicamente durante el trayecto","Una vez al año","Solo si la carga se mueve"], correct:1, explanation:"Las correas de estiba deben verificarse antes de la salida y regularmente durante el transporte." },
+
+  // ── EMERGENCIAS Y PRL ──
+  { id:38, category:"Emergencias y PRL", danger:false, q:"En caso de accidente, ¿cuál es el orden correcto de actuación (protocolo PAS)?", options:["Socorrer, Proteger, Avisar","Proteger, Avisar, Socorrer","Avisar, Proteger, Socorrer","Socorrer, Avisar, Proteger"], correct:1, explanation:"El protocolo PAS es: Proteger la zona, Avisar a los servicios de emergencia y Socorrer a los heridos." },
+  { id:39, category:"Emergencias y PRL", danger:false, q:"¿Cuál es el principal factor de riesgo de accidente en conductores profesionales?", options:["Exceso de velocidad exclusivamente","Fatiga y somnolencia","Fallos mecánicos","Condiciones meteorológicas"], correct:1, explanation:"La fatiga y somnolencia es el principal factor de riesgo, directamente relacionado con el incumplimiento de tiempos de descanso." },
+  { id:40, category:"Emergencias y PRL", danger:false, q:"El ciclo básico actividad/reposo es fundamental para:", options:["Reducir el consumo de combustible","Prevenir la fatiga y el estrés del conductor","Mejorar la imagen de marca","Cumplir el contrato de transporte"], correct:1, explanation:"El ciclo actividad/reposo es crucial para mantener la aptitud física y mental del conductor y prevenir la fatiga." },
+];
+
+// ─── CONCEPT LIBRARY ───
+const CONCEPTS = [
+  { title:"Categorías de Vehículos", icon:"Truck", items:["M = Transporte de personas", "N = Transporte de mercancías", "O = Remolques", "N1: MMA ≤ 3,5t · N2: 3,5-12t · N3: >12t", "O1: ≤0,75t · O2: 0,75-3,5t · O3: 3,5-10t · O4: >10t"] },
+  { title:"Masas Máximas por Ejes", icon:"Weight", items:["Eje simple motor: 11,5 t", "Eje simple no motor: 10 t", "Eje tándem (<1m): 11,5 t", "Eje tándem (1-1,3m): 16 t", "Eje tándem (1,3-1,8m): 18 t (19 t con neum. dobles + susp. neumática)"] },
+  { title:"MMA Camiones Rígidos", icon:"Truck", items:["2 ejes: 18 t", "3 ejes: 25 t (26 t con susp. neumática)", "4 ejes (2 direccionales + susp. neumática): 32 t", "4 ejes (otros): 31 t"] },
+  { title:"Dimensiones Máximas", icon:"Truck", items:["Longitud camión rígido: 12 m", "Anchura general: 2,55 m", "Anchura vehículo acondicionado: 2,60 m", "Altura general: 4,00 m", "Altura portavehículos/auxilio: 4,50 m"] },
+  { title:"Tiempos de Conducción (Reg. 561/2006)", icon:"Clock", items:["Conducción máx. diaria: 9 h (10 h × 2/semana)", "Conducción máx. semanal: 56 h", "Máx. 2 semanas consecutivas: 90 h", "Pausa obligatoria: 45 min tras 4,5 h", "Pausa divisible: 15 min + 30 min"] },
+  { title:"Descansos (Reg. 561/2006)", icon:"Clock", items:["Descanso diario normal: ≥ 11 h", "Descanso diario reducido: ≥ 9 h (máx. 3/semana)", "Descanso semanal normal: ≥ 45 h", "Descanso semanal reducido: ≥ 24 h (compensar en 3 semanas)"] },
+  { title:"Sistemas de Seguridad", icon:"Shield", items:["ABS: Antibloqueo de frenado", "EBS: Repartición electrónica de frenada", "ESP: Estabilización electrónica", "ASR: Control de tracción", "ACC: Control de crucero adaptativo", "AEBS: Frenada de emergencia automática"] },
+  { title:"CAP - Datos Clave", icon:"Book", items:["Cualificación Inicial Ordinaria: 244 h", "Regulado por RD 284/2021", "Evaluación: Apto / No Apto", "20 h de conducción efectiva mínima", "Formación continua: 35 h cada 5 años"] },
+];
+
+// ─── RANKS ───
+const RANKS = [
+  { name:"Novato", minXP:0, emoji:"🔰" },
+  { name:"Aprendiz", minXP:100, emoji:"🚛" },
+  { name:"Conductor", minXP:300, emoji:"🛣️" },
+  { name:"Profesional", minXP:600, emoji:"⭐" },
+  { name:"Veterano", minXP:1000, emoji:"🏅" },
+  { name:"Experto", minXP:1500, emoji:"🎖️" },
+  { name:"Rey del Asfalto", minXP:2500, emoji:"👑" },
+];
+
+// ─── SRS ALGORITHM ───
+function calcSRSWeight(card) {
+  if (!card) return 1;
+  const { correctCount=0, wrongCount=0, lastSeen=0 } = card;
+  const daysSince = (Date.now() - lastSeen) / (1000*60*60*24);
+  const errorRate = wrongCount / Math.max(1, correctCount + wrongCount);
+  // More weight = more likely to appear
+  return Math.max(0.1, (1 + errorRate * 3) * (1 + Math.min(daysSince, 7) * 0.3));
+}
+
+function pickWeightedQuestions(questions, cardData, count) {
+  const weighted = questions.map(q => ({ q, weight: calcSRSWeight(cardData[q.id]) }));
+  const totalWeight = weighted.reduce((s,w) => s + w.weight, 0);
+  const picked = [];
+  const available = [...weighted];
+
+  while (picked.length < count && available.length > 0) {
+    let r = Math.random() * available.reduce((s,w) => s + w.weight, 0);
+    for (let i = 0; i < available.length; i++) {
+      r -= available[i].weight;
+      if (r <= 0) {
+        picked.push(available[i].q);
+        available.splice(i, 1);
+        break;
+      }
+    }
+  }
+  return picked;
+}
+
+// ─── STORAGE HELPERS ───
+const STORAGE_KEY = 'rutapro_data';
+function loadData() {
+  try {
+    const d = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    return d || defaultData();
+  } catch { return defaultData(); }
+}
+function defaultData() {
+  return { xp:0, streak:0, lastStudyDate:null, totalCorrect:0, totalWrong:0, testsCompleted:0, cards:{}, dailyHistory:[] };
+}
+function saveData(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+// ─── MAIN APP ───
+function App() {
+  const [page, setPage] = useState('dashboard');
+  const [data, setData] = useState(loadData);
+
+  useEffect(() => { saveData(data); }, [data]);
+
+  const updateData = useCallback((updater) => {
+    setData(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
+      return next;
+    });
+  }, []);
+
+  const currentRank = useMemo(() => {
+    let r = RANKS[0];
+    for (const rank of RANKS) { if (data.xp >= rank.minXP) r = rank; }
+    return r;
+  }, [data.xp]);
+
+  const nextRank = useMemo(() => {
+    for (const rank of RANKS) { if (data.xp < rank.minXP) return rank; }
+    return null;
+  }, [data.xp]);
+
+  const failedQuestions = useMemo(() => {
+    return QUESTIONS.filter(q => {
+      const c = data.cards[q.id];
+      return c && c.wrongCount > 0 && (c.wrongCount >= c.correctCount);
+    });
+  }, [data.cards]);
+
+  const dangerQuestions = useMemo(() => QUESTIONS.filter(q => q.danger), []);
+
+  return (
+    <div className="min-h-screen">
+      {/* Top nav bar */}
+      <nav className="glass sticky top-0 z-50 border-b border-white/5">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setPage('dashboard')}>
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-yellow-400 to-amber-600 flex items-center justify-center">
+              <Icons.Truck size={18} />
+            </div>
+            <div>
+              <span className="font-display text-sm font-bold tracking-tight text-yellow-400">RUTA</span>
+              <span className="font-display text-sm font-bold tracking-tight text-white">PRO</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-xl">{currentRank.emoji}</span>
+            <span className="font-display text-yellow-400 font-semibold">{currentRank.name}</span>
+            <span className="text-asphalt-400 mx-1">·</span>
+            <span className="text-amber-400 font-display font-semibold">{data.xp} XP</span>
+            {data.streak > 0 && (
+              <span className="flex items-center gap-1 ml-2 text-orange-400">
+                <Icons.Flame size={14}/> {data.streak}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="road-stripe"></div>
+      </nav>
+
+      {/* Bottom mobile nav */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 glass border-t border-white/5 md:hidden">
+        <div className="flex justify-around py-2">
+          {[
+            { id:'dashboard', icon:Icons.Home, label:'Inicio' },
+            { id:'test', icon:Icons.Play, label:'Test' },
+            { id:'danger', icon:Icons.AlertTriangle, label:'Peligro' },
+            { id:'library', icon:Icons.Book, label:'Biblio' },
+            { id:'resources', icon:Icons.Globe, label:'Enlaces' },
+            { id:'stats', icon:Icons.Chart, label:'Stats' },
+          ].map(tab => (
+            <button key={tab.id} onClick={() => setPage(tab.id)}
+              className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors ${page===tab.id ? 'text-yellow-400' : 'text-asphalt-400'}`}>
+              <tab.icon size={18}/>
+              <span className="text-[10px] font-medium">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Main content */}
+      <main className="max-w-6xl mx-auto px-4 py-6 pb-24 md:pb-6">
+        {page === 'dashboard' && <Dashboard data={data} currentRank={currentRank} nextRank={nextRank} failedCount={failedQuestions.length} setPage={setPage} updateData={updateData}/>}
+        {page === 'test' && <TestMode questions={QUESTIONS} data={data} updateData={updateData} setPage={setPage} mode="test"/>}
+        {page === 'review' && <TestMode questions={failedQuestions.length > 0 ? failedQuestions : QUESTIONS} data={data} updateData={updateData} setPage={setPage} mode="review"/>}
+        {page === 'danger' && <TestMode questions={dangerQuestions} data={data} updateData={updateData} setPage={setPage} mode="danger"/>}
+        {page === 'library' && <Library/>}
+        {page === 'resources' && <Resources/>}
+        {page === 'stats' && <Stats data={data} updateData={updateData}/>}
+      </main>
+    </div>
+  );
+}
+
+// ─── DASHBOARD ───
+function Dashboard({ data, currentRank, nextRank, failedCount, setPage, updateData }) {
+  const totalAnswered = data.totalCorrect + data.totalWrong;
+  const accuracy = totalAnswered > 0 ? Math.round((data.totalCorrect / totalAnswered)*100) : 0;
+  const progress = nextRank ? Math.min(100, ((data.xp - currentRank.minXP) / (nextRank.minXP - currentRank.minXP))*100) : 100;
+
+  // Check streak
+  useEffect(() => {
+    const today = new Date().toDateString();
+    if (data.lastStudyDate && data.lastStudyDate !== today) {
+      const last = new Date(data.lastStudyDate);
+      const diff = Math.floor((new Date(today) - last) / (1000*60*60*24));
+      if (diff > 1 && data.streak > 0) {
+        updateData(p => ({ ...p, streak: 0 }));
+      }
+    }
+  }, []);
+
+  return (
+    <div className="space-y-6 animate-fade">
+      {/* Hero */}
+      <div className="glass rounded-2xl p-6 glow-card">
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
+          <div className="flex-1">
+            <h1 className="font-display text-2xl md:text-3xl font-bold mb-1">
+              <span className="text-yellow-400">CAP</span> & <span className="text-white">Permiso C</span>
+            </h1>
+            <p className="text-asphalt-300 text-sm">Plataforma de estudio con repetición espaciada · 40 preguntas basadas en RVP 2024 & programas TMVI</p>
+          </div>
+          <div className="text-center">
+            <div className="text-4xl mb-1">{currentRank.emoji}</div>
+            <div className="font-display text-yellow-400 font-bold text-sm">{currentRank.name}</div>
+            {nextRank && (
+              <div className="mt-2 w-32">
+                <div className="h-1.5 bg-asphalt-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-yellow-500 to-amber-400 rounded-full transition-all duration-700" style={{width:`${progress}%`}}></div>
+                </div>
+                <div className="text-[10px] text-asphalt-400 mt-1">{data.xp}/{nextRank.minXP} XP → {nextRank.emoji} {nextRank.name}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Quick stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label:'Precisión', value:`${accuracy}%`, color:'text-green-400', icon:Icons.Check },
+          { label:'Respondidas', value:totalAnswered, color:'text-blue-400', icon:Icons.Zap },
+          { label:'Tests', value:data.testsCompleted, color:'text-purple-400', icon:Icons.Trophy },
+          { label:'Racha', value:`${data.streak} días`, color:'text-orange-400', icon:Icons.Flame },
+        ].map((s,i) => (
+          <div key={i} className="glass rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <s.icon size={14} />
+              <span className="text-asphalt-400 text-xs font-medium">{s.label}</span>
+            </div>
+            <div className={`font-display text-xl font-bold ${s.color}`}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Action cards */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <button onClick={() => setPage('test')}
+          className="glass rounded-xl p-5 text-left hover:border-yellow-500/30 transition-all group">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center text-yellow-400 group-hover:bg-yellow-500/20 transition-colors">
+              <Icons.Play size={20}/>
+            </div>
+            <div>
+              <h3 className="font-display font-bold text-white">Modo Test</h3>
+              <p className="text-xs text-asphalt-400">20 preguntas aleatorias con SRS</p>
+            </div>
+          </div>
+        </button>
+
+        <button onClick={() => setPage('review')}
+          className="glass rounded-xl p-5 text-left hover:border-blue-500/30 transition-all group">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 group-hover:bg-blue-500/20 transition-colors">
+              <Icons.RefreshCw size={20}/>
+            </div>
+            <div>
+              <h3 className="font-display font-bold text-white">Modo Repaso</h3>
+              <p className="text-xs text-asphalt-400">{failedCount > 0 ? `${failedCount} preguntas falladas pendientes` : 'Todas correctas — repaso general'}</p>
+            </div>
+          </div>
+        </button>
+
+        <button onClick={() => setPage('danger')}
+          className="glass rounded-xl p-5 text-left hover:border-red-500/30 transition-all group">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400 group-hover:bg-red-500/20 transition-colors">
+              <Icons.AlertTriangle size={20}/>
+            </div>
+            <div>
+              <h3 className="font-display font-bold text-white">Zona de Peligro</h3>
+              <p className="text-xs text-asphalt-400">Tacógrafo · Tiempos · Masas y Dimensiones</p>
+            </div>
+          </div>
+        </button>
+
+        <button onClick={() => setPage('library')}
+          className="glass rounded-xl p-5 text-left hover:border-green-500/30 transition-all group">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-400 group-hover:bg-green-500/20 transition-colors">
+              <Icons.Book size={20}/>
+            </div>
+            <div>
+              <h3 className="font-display font-bold text-white">Biblioteca</h3>
+              <p className="text-xs text-asphalt-400">Fichas de conceptos clave</p>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      {/* Recursos de Élite */}
+      <button onClick={() => setPage('resources')}
+        className="w-full glass rounded-xl p-5 text-left hover:border-cyan-500/30 transition-all group border border-cyan-900/20">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500/10 to-blue-500/10 flex items-center justify-center text-cyan-400 group-hover:from-cyan-500/20 group-hover:to-blue-500/20 transition-colors">
+            <Icons.Globe size={20}/>
+          </div>
+          <div className="flex-1">
+            <h3 className="font-display font-bold text-white">Recursos de Élite</h3>
+            <p className="text-xs text-asphalt-400">Simuladores oficiales, tests y enlaces estratégicos para preparar el CAP y Permiso C</p>
+          </div>
+          <Icons.ExternalLink size={16} className="text-asphalt-500 group-hover:text-cyan-400 transition-colors"/>
+        </div>
+      </button>
+
+      {/* Danger zone preview */}
+      <div className="glass rounded-xl p-5 border-red-900/30">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="danger-badge px-2 py-0.5 rounded text-[10px] font-display font-bold text-white tracking-wider">ZONA DE PELIGRO</div>
+          <span className="text-xs text-asphalt-400">Temas que más caen en el examen</span>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {['Tacógrafo','Tiempos de Conducción','Masas y Dimensiones'].map((topic,i) => {
+            const topicQs = QUESTIONS.filter(q => q.category === topic);
+            const answered = topicQs.filter(q => data.cards[q.id]);
+            const correct = topicQs.filter(q => data.cards[q.id]?.correctCount > data.cards[q.id]?.wrongCount);
+            const pct = answered.length > 0 ? Math.round((correct.length/topicQs.length)*100) : 0;
+            return (
+              <div key={i} className="bg-asphalt-900/50 rounded-lg p-3 text-center">
+                <div className={`font-display text-lg font-bold ${pct >= 70 ? 'text-green-400' : pct >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>{pct}%</div>
+                <div className="text-[10px] text-asphalt-400 mt-0.5">{topic}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TEST MODE ───
+function TestMode({ questions, data, updateData, setPage, mode }) {
+  const [testQuestions, setTestQuestions] = useState([]);
+  const [current, setCurrent] = useState(0);
+  const [selected, setSelected] = useState(null);
+  const [revealed, setRevealed] = useState(false);
+  const [results, setResults] = useState([]);
+  const [finished, setFinished] = useState(false);
+  const [shakeWrong, setShakeWrong] = useState(false);
+
+  useEffect(() => {
+    const count = mode === 'danger' ? Math.min(16, questions.length) : Math.min(20, questions.length);
+    const picked = pickWeightedQuestions(questions, data.cards, count);
+    // Shuffle
+    for (let i = picked.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [picked[i], picked[j]] = [picked[j], picked[i]];
+    }
+    setTestQuestions(picked);
+  }, []);
+
+  const handleSelect = (idx) => {
+    if (revealed) return;
+    setSelected(idx);
+  };
+
+  const handleConfirm = () => {
+    if (selected === null) return;
+    const q = testQuestions[current];
+    const isCorrect = selected === q.correct;
+
+    if (!isCorrect) {
+      setShakeWrong(true);
+      setTimeout(() => setShakeWrong(false), 500);
+    }
+
+    setRevealed(true);
+    setResults(prev => [...prev, { qId: q.id, correct: isCorrect }]);
+
+    // Update SRS card data
+    updateData(prev => {
+      const cards = { ...prev.cards };
+      const card = cards[q.id] || { correctCount:0, wrongCount:0, lastSeen:0 };
+      cards[q.id] = {
+        correctCount: card.correctCount + (isCorrect ? 1 : 0),
+        wrongCount: card.wrongCount + (isCorrect ? 0 : 1),
+        lastSeen: Date.now()
+      };
+
+      const today = new Date().toDateString();
+      let streak = prev.streak;
+      if (prev.lastStudyDate !== today) {
+        const last = prev.lastStudyDate ? new Date(prev.lastStudyDate) : null;
+        const diff = last ? Math.floor((new Date(today) - last) / (1000*60*60*24)) : 2;
+        streak = diff <= 1 ? prev.streak + 1 : 1;
+      }
+
+      return {
+        ...prev,
+        cards,
+        totalCorrect: prev.totalCorrect + (isCorrect ? 1 : 0),
+        totalWrong: prev.totalWrong + (isCorrect ? 0 : 1),
+        xp: prev.xp + (isCorrect ? 10 : 2),
+        lastStudyDate: today,
+        streak,
+      };
+    });
+  };
+
+  const handleNext = () => {
+    if (current + 1 >= testQuestions.length) {
+      updateData(prev => ({ ...prev, testsCompleted: prev.testsCompleted + 1, xp: prev.xp + 25 }));
+      setFinished(true);
+    } else {
+      setCurrent(current + 1);
+      setSelected(null);
+      setRevealed(false);
+    }
+  };
+
+  if (testQuestions.length === 0) return <div className="text-center py-20 text-asphalt-400">Cargando preguntas...</div>;
+
+  if (finished) {
+    const correctCount = results.filter(r => r.correct).length;
+    const pct = Math.round((correctCount / results.length)*100);
+    return (
+      <div className="max-w-xl mx-auto animate-slide-up">
+        <div className="glass rounded-2xl p-8 text-center">
+          <div className={`text-6xl mb-4 ${pct >= 70 ? 'animate-confetti' : ''}`}>{pct >= 90 ? '🏆' : pct >= 70 ? '✅' : pct >= 50 ? '📘' : '💪'}</div>
+          <h2 className="font-display text-2xl font-bold mb-2">{pct >= 70 ? '¡Gran resultado!' : 'Sigue practicando'}</h2>
+          <div className="text-5xl font-display font-bold mb-1">
+            <span className={pct >= 70 ? 'text-green-400' : pct >= 50 ? 'text-yellow-400' : 'text-red-400'}>{pct}%</span>
+          </div>
+          <p className="text-asphalt-400 text-sm mb-6">{correctCount} de {results.length} correctas · +{correctCount*10 + 25} XP</p>
+
+          <div className="space-y-2 mb-6 max-h-60 overflow-y-auto">
+            {results.map((r, i) => {
+              const q = QUESTIONS.find(qq => qq.id === r.qId);
+              return (
+                <div key={i} className={`flex items-center gap-2 text-left text-xs px-3 py-2 rounded-lg ${r.correct ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>
+                  {r.correct ? <Icons.Check size={14}/> : <Icons.X size={14}/>}
+                  <span className="truncate">{q?.q}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex gap-3 justify-center">
+            <button onClick={() => setPage('dashboard')} className="px-5 py-2.5 rounded-lg bg-asphalt-800 text-sm font-medium hover:bg-asphalt-700 transition-colors">Volver</button>
+            <button onClick={() => { setFinished(false); setCurrent(0); setSelected(null); setRevealed(false); setResults([]); const count = mode === 'danger' ? Math.min(16, questions.length) : Math.min(20, questions.length); setTestQuestions(pickWeightedQuestions(questions, data.cards, count)); }}
+              className="px-5 py-2.5 rounded-lg bg-yellow-500 text-black text-sm font-bold hover:bg-yellow-400 transition-colors">Repetir</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const q = testQuestions[current];
+  const modeLabel = mode === 'danger' ? 'ZONA DE PELIGRO' : mode === 'review' ? 'REPASO' : 'TEST';
+  const modeColor = mode === 'danger' ? 'text-red-400' : mode === 'review' ? 'text-blue-400' : 'text-yellow-400';
+
+  return (
+    <div className="max-w-2xl mx-auto animate-fade">
+      {/* Progress bar */}
+      <div className="flex items-center gap-3 mb-4">
+        <button onClick={() => setPage('dashboard')} className="text-asphalt-400 hover:text-white transition-colors text-sm">✕</button>
+        <div className="flex-1 h-2 bg-asphalt-800 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-yellow-500 to-amber-400 rounded-full transition-all duration-500"
+            style={{width:`${((current+1)/testQuestions.length)*100}%`}}></div>
+        </div>
+        <span className="font-display text-xs text-asphalt-400">{current+1}/{testQuestions.length}</span>
+      </div>
+
+      {/* Category badge */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className={`font-display text-[10px] font-bold tracking-widest ${modeColor}`}>{modeLabel}</span>
+        <span className="text-asphalt-600">·</span>
+        <span className="text-xs text-asphalt-400">{q.category}</span>
+        {q.danger && <span className="danger-badge text-[9px] px-1.5 py-0.5 rounded font-bold text-white">⚠ CRÍTICO</span>}
+      </div>
+
+      {/* Question */}
+      <div className={`glass rounded-xl p-6 mb-4 ${shakeWrong ? 'animate-shake' : ''}`}>
+        <h2 className="font-body text-lg md:text-xl font-semibold leading-relaxed">{q.q}</h2>
+      </div>
+
+      {/* Options */}
+      <div className="space-y-3 mb-6">
+        {q.options.map((opt, idx) => {
+          let cls = 'option-btn';
+          if (revealed) {
+            if (idx === q.correct) cls += ' correct';
+            else if (idx === selected && idx !== q.correct) cls += ' wrong';
+          } else if (idx === selected) {
+            cls += ' selected';
+          }
+          return (
+            <button key={idx} onClick={() => handleSelect(idx)}
+              className={`${cls} w-full text-left rounded-xl px-5 py-4 flex items-center gap-3 bg-asphalt-950/50`}>
+              <span className="w-8 h-8 rounded-lg bg-asphalt-800 flex items-center justify-center font-display text-sm font-bold text-asphalt-300 shrink-0">
+                {String.fromCharCode(65+idx)}
+              </span>
+              <span className="text-sm md:text-base">{opt}</span>
+              {revealed && idx === q.correct && <Icons.Check size={18} />}
+              {revealed && idx === selected && idx !== q.correct && <Icons.X size={18}/>}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Explanation */}
+      {revealed && (
+        <div className="glass rounded-xl p-5 mb-4 border-l-4 border-yellow-500 animate-slide-up">
+          <p className="text-sm text-asphalt-200"><span className="text-yellow-400 font-bold">Explicación:</span> {q.explanation}</p>
+        </div>
+      )}
+
+      {/* Action button */}
+      <div className="flex justify-center">
+        {!revealed ? (
+          <button onClick={handleConfirm} disabled={selected === null}
+            className={`px-8 py-3 rounded-xl font-display font-bold text-sm transition-all ${selected !== null ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-asphalt-800 text-asphalt-500 cursor-not-allowed'}`}>
+            Comprobar
+          </button>
+        ) : (
+          <button onClick={handleNext}
+            className="px-8 py-3 rounded-xl bg-yellow-500 text-black font-display font-bold text-sm hover:bg-yellow-400 transition-all">
+            {current + 1 >= testQuestions.length ? 'Ver Resultados' : 'Siguiente →'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── LIBRARY ───
+function Library() {
+  const [expanded, setExpanded] = useState(null);
+  const iconMap = { Truck:Icons.Truck, Weight:Icons.Weight, Clock:Icons.Clock, Shield:Icons.Shield, Book:Icons.Book };
+
+  return (
+    <div className="max-w-3xl mx-auto animate-fade">
+      <div className="flex items-center gap-3 mb-6">
+        <Icons.Book size={24}/>
+        <h2 className="font-display text-xl font-bold">Biblioteca de Conceptos</h2>
+      </div>
+      <div className="space-y-3">
+        {CONCEPTS.map((c, i) => {
+          const IconComp = iconMap[c.icon] || Icons.Book;
+          const isOpen = expanded === i;
+          return (
+            <div key={i} className="glass rounded-xl overflow-hidden">
+              <button onClick={() => setExpanded(isOpen ? null : i)}
+                className="w-full text-left px-5 py-4 flex items-center gap-3 hover:bg-white/[0.02] transition-colors">
+                <div className="w-9 h-9 rounded-lg bg-yellow-500/10 flex items-center justify-center text-yellow-400 shrink-0">
+                  <IconComp size={18}/>
+                </div>
+                <span className="font-display font-semibold text-sm flex-1">{c.title}</span>
+                <span className={`text-asphalt-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}>▾</span>
+              </button>
+              {isOpen && (
+                <div className="px-5 pb-4 animate-slide-up">
+                  <div className="border-t border-white/5 pt-3 space-y-2">
+                    {c.items.map((item, j) => (
+                      <div key={j} className="flex items-start gap-2 text-sm">
+                        <span className="text-yellow-500 mt-1 shrink-0">▸</span>
+                        <span className="text-asphalt-200">{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── RESOURCES ───
+function Resources() {
+  const resources = [
+    {
+      name: "Simulador Oficial MITMA (CAP)",
+      url: "https://www.transportes.gob.es/transporte-terrestre/examenes-y-formacion/examenes-de-formacion-de-conductores-profesionales-cap",
+      desc: "La fuente de verdad del Ministerio. Preguntas reales de examen CAP actualizadas.",
+      icon: Icons.GraduationCap,
+      color: "from-amber-500/15 to-yellow-500/15",
+      hoverBorder: "hover:border-amber-500/40",
+      iconColor: "text-amber-400",
+      tag: "OFICIAL",
+      tagColor: "bg-amber-500/20 text-amber-300",
+    },
+    {
+      name: "TodoTest — Permiso C",
+      url: "https://www.todotest.com/tests/test_camion_idx.asp?t=21",
+      desc: "El estándar del sector para el examen teórico del permiso de camión. Miles de preguntas.",
+      icon: Icons.FileText,
+      color: "from-blue-500/15 to-indigo-500/15",
+      hoverBorder: "hover:border-blue-500/40",
+      iconColor: "text-blue-400",
+      tag: "POPULAR",
+      tagColor: "bg-blue-500/20 text-blue-300",
+    },
+    {
+      name: "ExamenCAP.es — Mercancías",
+      url: "https://examencap.es/mercancias",
+      desc: "Ideal para repasar por módulos específicos de mercancías. Organizado por bloques temáticos.",
+      icon: Icons.Truck,
+      color: "from-green-500/15 to-emerald-500/15",
+      hoverBorder: "hover:border-green-500/40",
+      iconColor: "text-green-400",
+      tag: "MODULAR",
+      tagColor: "bg-green-500/20 text-green-300",
+    },
+    {
+      name: "PracticaTest",
+      url: "https://practicatest.com/",
+      desc: "Manuales online y explicaciones detalladas de cada fallo. Perfecto para entender el porqué.",
+      icon: Icons.Book,
+      color: "from-purple-500/15 to-fuchsia-500/15",
+      hoverBorder: "hover:border-purple-500/40",
+      iconColor: "text-purple-400",
+      tag: "APRENDE",
+      tagColor: "bg-purple-500/20 text-purple-300",
+    },
+    {
+      name: "DrivenYou — C1/C Tests",
+      url: "https://www.drivenyou.com/permiso-c1-c/tests-examen-dgt/1",
+      desc: "Interfaz limpia para tests rápidos de última hornada. Tests actualizados con formato DGT.",
+      icon: Icons.Monitor,
+      color: "from-cyan-500/15 to-teal-500/15",
+      hoverBorder: "hover:border-cyan-500/40",
+      iconColor: "text-cyan-400",
+      tag: "RÁPIDO",
+      tagColor: "bg-cyan-500/20 text-cyan-300",
+    },
+  ];
+
+  return (
+    <div className="max-w-3xl mx-auto animate-fade">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-2">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center text-cyan-400">
+          <Icons.Sparkles size={22}/>
+        </div>
+        <div>
+          <h2 className="font-display text-xl font-bold">Recursos de Élite</h2>
+          <p className="text-xs text-asphalt-400">Enlaces oficiales y plataformas verificadas para tu preparación</p>
+        </div>
+      </div>
+
+      <div className="road-stripe my-5 rounded-full"></div>
+
+      {/* Resource cards */}
+      <div className="space-y-3 mb-6">
+        {resources.map((r, i) => (
+          <a key={i} href={r.url} target="_blank" rel="noopener noreferrer"
+            className={`glass rounded-xl p-5 flex items-start gap-4 transition-all ${r.hoverBorder} group block cursor-pointer`}
+            style={{animationDelay: `${i * 80}ms`}}>
+            <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${r.color} flex items-center justify-center ${r.iconColor} shrink-0 group-hover:scale-110 transition-transform`}>
+              <r.icon size={20}/>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h3 className="font-display font-bold text-sm text-white group-hover:text-yellow-300 transition-colors">{r.name}</h3>
+                <span className={`${r.tagColor} text-[9px] font-display font-bold px-1.5 py-0.5 rounded tracking-wider`}>{r.tag}</span>
+              </div>
+              <p className="text-xs text-asphalt-300 leading-relaxed">{r.desc}</p>
+            </div>
+            <div className="text-asphalt-600 group-hover:text-cyan-400 transition-colors shrink-0 mt-1">
+              <Icons.ExternalLink size={16}/>
+            </div>
+          </a>
+        ))}
+      </div>
+
+      {/* Internet notice */}
+      <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-asphalt-900/50 border border-asphalt-800/50">
+        <div className="text-asphalt-500 shrink-0">
+          <Icons.Globe size={16}/>
+        </div>
+        <p className="text-[11px] text-asphalt-400">
+          <span className="text-asphalt-300 font-medium">Nota:</span> Estos recursos son externos y requieren conexión a internet. RutaPro no se hace responsable de su contenido o disponibilidad.
+        </p>
+      </div>
+
+      {/* Tip card */}
+      <div className="glass rounded-xl p-5 mt-4 border-l-4 border-yellow-500/50">
+        <div className="flex items-start gap-3">
+          <Icons.Zap size={18} className="text-yellow-400 shrink-0 mt-0.5"/>
+          <div>
+            <h4 className="font-display text-xs font-bold text-yellow-400 mb-1">CONSEJO PRO</h4>
+            <p className="text-xs text-asphalt-300 leading-relaxed">Combina el estudio con RutaPro (repetición espaciada) + los tests del Simulador MITMA para preguntas reales. Usa TodoTest para simular el examen completo del Permiso C y ExamenCAP para repasar módulos específicos donde falles.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── STATS ───
+function Stats({ data, updateData }) {
+  const chartRef = useRef(null);
+  const chartInstance = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const categories = useMemo(() => {
+    const cats = {};
+    QUESTIONS.forEach(q => {
+      if (!cats[q.category]) cats[q.category] = { total:0, correct:0, wrong:0 };
+      cats[q.category].total++;
+      const card = data.cards[q.id];
+      if (card) {
+        cats[q.category].correct += card.correctCount || 0;
+        cats[q.category].wrong += card.wrongCount || 0;
+      }
+    });
+    return cats;
+  }, [data.cards]);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    if (chartInstance.current) chartInstance.current.destroy();
+
+    const labels = Object.keys(categories);
+    const correctData = labels.map(l => categories[l].correct);
+    const wrongData = labels.map(l => categories[l].wrong);
+
+    chartInstance.current = new Chart(chartRef.current, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label:'Correctas', data:correctData, backgroundColor:'rgba(16,185,129,0.7)', borderRadius:4 },
+          { label:'Incorrectas', data:wrongData, backgroundColor:'rgba(239,68,68,0.7)', borderRadius:4 },
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color:'#8e8e9b', font: { family:'DM Sans', size:11 } } },
+        },
+        scales: {
+          x: { ticks:{ color:'#5b5b68', font:{ family:'DM Sans', size:10 }, maxRotation:45 }, grid:{ color:'rgba(255,255,255,0.03)' } },
+          y: { ticks:{ color:'#5b5b68', font:{ family:'DM Sans', size:10 } }, grid:{ color:'rgba(255,255,255,0.05)' } },
+        }
+      }
+    });
+
+    return () => { if (chartInstance.current) chartInstance.current.destroy(); };
+  }, [categories]);
+
+  const exportData = () => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `rutapro_backup_${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const importData = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const imported = JSON.parse(evt.target.result);
+        if (imported.xp !== undefined && imported.cards !== undefined) {
+          updateData(imported);
+          alert('✅ Progreso importado correctamente');
+        } else {
+          alert('❌ El archivo no tiene el formato correcto');
+        }
+      } catch { alert('❌ Error al leer el archivo'); }
+    };
+    reader.readAsText(file);
+  };
+
+  const resetData = () => {
+    if (confirm('⚠️ ¿Seguro que quieres borrar TODOS tus datos? Esta acción no se puede deshacer.')) {
+      updateData(defaultData());
+    }
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-6 animate-fade">
+      <div className="flex items-center gap-3 mb-2">
+        <Icons.Chart size={24}/>
+        <h2 className="font-display text-xl font-bold">Estadísticas y Datos</h2>
+      </div>
+
+      {/* Chart */}
+      <div className="glass rounded-xl p-5">
+        <h3 className="font-display text-sm font-semibold mb-4 text-asphalt-300">Rendimiento por Categoría</h3>
+        <div className="h-64">
+          <canvas ref={chartRef}></canvas>
+        </div>
+      </div>
+
+      {/* Category breakdown */}
+      <div className="glass rounded-xl p-5">
+        <h3 className="font-display text-sm font-semibold mb-4 text-asphalt-300">Desglose por Tema</h3>
+        <div className="space-y-3">
+          {Object.entries(categories).map(([cat, stats]) => {
+            const total = stats.correct + stats.wrong;
+            const pct = total > 0 ? Math.round((stats.correct/total)*100) : 0;
+            return (
+              <div key={cat} className="flex items-center gap-3">
+                <span className="text-xs text-asphalt-300 w-40 truncate">{cat}</span>
+                <div className="flex-1 h-2 bg-asphalt-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full transition-all" style={{width:`${pct}%`}}></div>
+                </div>
+                <span className={`font-display text-xs font-bold w-10 text-right ${pct >= 70 ? 'text-green-400' : pct >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>{pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Data sovereignty */}
+      <div className="glass rounded-xl p-5">
+        <h3 className="font-display text-sm font-semibold mb-1 text-asphalt-300">Soberanía de Datos</h3>
+        <p className="text-xs text-asphalt-500 mb-4">Tus datos son tuyos. Exporta, importa o restablece tu progreso.</p>
+        <div className="flex flex-wrap gap-3">
+          <button onClick={exportData} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-500/10 text-green-400 text-sm font-medium hover:bg-green-500/20 transition-colors">
+            <Icons.Download size={16}/> Exportar JSON
+          </button>
+          <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/10 text-blue-400 text-sm font-medium hover:bg-blue-500/20 transition-colors">
+            <Icons.Upload size={16}/> Importar JSON
+          </button>
+          <input ref={fileInputRef} type="file" accept=".json" onChange={importData} className="hidden"/>
+          <button onClick={resetData} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/10 text-red-400 text-sm font-medium hover:bg-red-500/20 transition-colors">
+            <Icons.X size={16}/> Restablecer todo
+          </button>
+        </div>
+      </div>
+
+      {/* Footer credits */}
+      <div className="text-center py-4">
+        <p className="text-[10px] text-asphalt-600 font-display">RUTAPRO v1.0 · Basado en Manual RVP 2024 · TMVI03 · TMVI21</p>
+        <p className="text-[10px] text-asphalt-700 font-display mt-0.5">© 2026 Proyecto Estrella · tretoef-estrella · Todos los derechos reservados</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── RENDER ───
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
