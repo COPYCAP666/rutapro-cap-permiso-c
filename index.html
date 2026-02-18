@@ -749,6 +749,7 @@ function renderNav() {
   const tabs = [
     { id: 'dashboard', icon: 'home', label: 'Inicio' },
     { id: 'examen', icon: 'zap', label: 'Examen' },
+    { id: 'maraton', icon: 'book', label: 'Maratón' },
     { id: 'test', icon: 'play', label: 'Test' },
     { id: 'infinito', icon: 'infinite', label: '∞' },
     { id: 'flashcards', icon: 'card', label: 'Cards' },
@@ -810,6 +811,7 @@ function renderDashboard() {
 
   const modes = [
     { id: 'examen', icon: 'zap', color: '#f87171', border: 'rgba(239,68,68,.2)', label: 'Examen', desc: '50 preguntas · 50 min' },
+    { id: 'maraton', icon: 'book', color: '#f59e0b', border: 'rgba(245,158,11,.2)', label: 'Maratón', desc: 'Las ' + QUESTIONS.length + ' preguntas' },
     { id: 'test', icon: 'play', color: '#60a5fa', border: 'rgba(96,165,250,.2)', label: 'Test', desc: '20 preguntas' },
     { id: 'infinito', icon: 'infinite', color: '#c084fc', border: 'rgba(192,132,252,.2)', label: 'Infinito', desc: 'Sin fin' },
     { id: 'flashcards', icon: 'card', color: '#22d3ee', border: 'rgba(34,211,238,.2)', label: 'Cards', desc: 'Memorizar' }
@@ -821,7 +823,10 @@ function renderDashboard() {
         el('span', { style: { color: '#facc15' } }, 'RUTA'),
         el('span', { style: { color: '#fff' } }, 'PRO')
       ),
-      el('p', { style: { color: '#6b7280', fontSize: '.875rem', marginTop: '.25rem' } }, QUESTIONS.length + ' preguntas CAP · Genérico + Mercancías')
+      el('div', { style: { display: 'flex', alignItems: 'center', gap: '.75rem', marginTop: '.5rem' } },
+        el('span', { className: 'font-display', style: { fontSize: '1.5rem', fontWeight: 700, color: '#facc15' } }, String(QUESTIONS.length)),
+        el('span', { style: { color: '#6b7280', fontSize: '.875rem' } }, ' preguntas CAP integradas · Genérico + Mercancías')
+      )
     ),
     el('div', { className: 'grid-4' },
       stats.map(s =>
@@ -1291,6 +1296,166 @@ function renderStats() {
   );
 }
 
+// ========== MARATÓN MODE ==========
+let maratonQuestions = [];
+let maratonCurr = 0;
+let maratonSel = null;
+let maratonRevealed = false;
+let maratonResults = [];
+let maratonFinished = false;
+let maratonStarted = false;
+
+function initMaraton() {
+  maratonQuestions = shuffle(QUESTIONS);
+  maratonCurr = 0; maratonSel = null; maratonRevealed = false;
+  maratonResults = []; maratonFinished = false; maratonStarted = true;
+}
+
+function renderMaraton() {
+  if (!maratonStarted) {
+    const total = QUESTIONS.length;
+    return el('div', { style: { maxWidth: '36rem', margin: '0 auto' } },
+      el('div', { className: 'glass', style: { borderRadius: '1rem', padding: '2rem', textAlign: 'center' } },
+        (() => { const i = icon('book', 48); i.style.color = '#f59e0b'; i.style.margin = '0 auto 1rem'; return i; })(),
+        el('h2', { className: 'font-display', style: { fontSize: '1.5rem', fontWeight: 700, color: '#fff', marginBottom: '.5rem' } }, 'Maratón CAP'),
+        el('p', { style: { color: '#9ca3af', fontSize: '.875rem', marginBottom: '1.5rem', lineHeight: '1.6' } },
+          'Responde las ' + total + ' preguntas del banco completo. Sin límite de tiempo. Puedes dejarlo y retomarlo.'
+        ),
+        el('div', { style: { background: 'rgba(0,0,0,.3)', padding: '1rem', borderRadius: '.5rem', marginBottom: '1.5rem', textAlign: 'left' } },
+          el('div', { className: 'flex-between mb-2', style: { color: '#fff' } }, el('span', null, 'Preguntas:'), el('span', { className: 'font-display', style: { fontWeight: 700, color: '#facc15' } }, String(total))),
+          el('div', { className: 'flex-between mb-2', style: { color: '#fff' } }, el('span', null, 'Tiempo:'), el('span', { style: { fontWeight: 700 } }, 'Sin límite')),
+          el('div', { className: 'flex-between', style: { color: '#fff' } }, el('span', null, 'Objetivo:'), el('span', { style: { fontWeight: 700, color: '#4ade80' } }, '100%'))
+        ),
+        el('button', { className: 'btn btn-primary btn-full mb-4', onClick: () => { initMaraton(); render(); } }, '🏁 Comenzar Maratón'),
+        el('button', { className: 'btn btn-ghost btn-full', onClick: () => setPage('dashboard') }, 'Cancelar')
+      )
+    );
+  }
+
+  if (maratonFinished) {
+    const ok = maratonResults.filter(r => r.c).length;
+    const total = maratonResults.length;
+    const p = Math.round((ok / total) * 100);
+    return el('div', { style: { maxWidth: '36rem', margin: '0 auto' } },
+      el('div', { className: 'glass', style: { borderRadius: '1rem', padding: '2rem', textAlign: 'center' } },
+        el('div', { style: { fontSize: '3.5rem', marginBottom: '1rem' } }, p >= 70 ? '🏆' : '💪'),
+        el('h2', { className: 'font-display', style: { fontSize: '1.5rem', fontWeight: 700, color: '#fff', marginBottom: '.5rem' } },
+          p >= 90 ? '¡Maratón Legendario!' : p >= 70 ? '¡Maratón Completado!' : '¡Sigue estudiando!'
+        ),
+        el('div', { className: 'font-display', style: { fontSize: '3rem', fontWeight: 700, color: p >= 70 ? '#4ade80' : '#facc15', marginBottom: '.5rem' } }, p + '%'),
+        el('div', { style: { color: '#9ca3af', marginBottom: '1.5rem', fontSize: '.875rem' } }, ok + '/' + total + ' correctas'),
+        el('button', { className: 'btn btn-primary btn-full mb-4', onClick: () => { maratonStarted = false; maratonFinished = false; setPage('dashboard'); } }, 'Volver'),
+        el('button', { className: 'btn btn-ghost btn-full', onClick: () => { initMaraton(); render(); } }, '🔄 Repetir Maratón')
+      )
+    );
+  }
+
+  const q = maratonQuestions[maratonCurr];
+  const total = maratonQuestions.length;
+  const progress = ((maratonCurr + 1) / total) * 100;
+  const okSoFar = maratonResults.filter(r => r.c).length;
+  const wrongSoFar = maratonResults.length - okSoFar;
+
+  return el('div', { className: 'animate-fade', style: { maxWidth: '42rem', margin: '0 auto' } },
+    // Progress header
+    el('div', { className: 'mb-4' },
+      el('div', { className: 'flex-between mb-2' },
+        el('span', { style: { color: '#fff', fontSize: '.875rem' } }, (maratonCurr + 1) + '/' + total),
+        el('div', { style: { display: 'flex', gap: '1rem' } },
+          el('span', { style: { fontSize: '.75rem', color: '#4ade80' } }, '✓ ' + okSoFar),
+          el('span', { style: { fontSize: '.75rem', color: '#f87171' } }, '✗ ' + wrongSoFar),
+          el('span', { className: 'font-display', style: { fontSize: '.75rem', color: '#facc15' } }, Math.round(progress) + '%')
+        )
+      ),
+      el('div', { className: 'progress-track' },
+        el('div', { className: 'progress-fill', style: { width: progress + '%' } })
+      )
+    ),
+    // Question
+    el('div', { className: 'glass q-card' },
+      el('h3', { className: 'q-text' }, q.q)
+    ),
+    // Options
+    el('div', { className: 'mb-6' },
+      q.options.map((opt, i) => {
+        let cls = 'opt-btn';
+        if (maratonRevealed) {
+          cls += ' locked';
+          if (i === q.correct) cls += ' correct';
+          else if (i === maratonSel && i !== q.correct) cls += ' wrong';
+        } else if (i === maratonSel) cls += ' selected';
+
+        const btn = el('button', { className: cls, onClick: () => {
+          if (!maratonRevealed) { maratonSel = i; render(); }
+        } },
+          el('span', { className: 'opt-letter' }, String.fromCharCode(65 + i) + '.'),
+          ' ' + opt
+        );
+
+        if (maratonRevealed && i === q.correct) {
+          const chk = document.createElement('span');
+          chk.innerHTML = iconSvg('check', 18);
+          chk.style.cssText = 'float:right;color:#4ade80';
+          btn.appendChild(chk);
+        }
+        if (maratonRevealed && i === maratonSel && i !== q.correct) {
+          const xx = document.createElement('span');
+          xx.innerHTML = iconSvg('x', 18);
+          xx.style.cssText = 'float:right;color:#f87171';
+          btn.appendChild(xx);
+        }
+        return btn;
+      })
+    ),
+    // Explanation
+    maratonRevealed ? el('div', { className: 'glass explanation' },
+      el('span', { style: { color: '#facc15', fontWeight: 700 } }, '→ '),
+      el('span', { style: { color: '#fff' } }, q.explanation)
+    ) : null,
+    // Buttons
+    el('div', { style: { display: 'flex', gap: '.75rem', justifyContent: 'center' } },
+      !maratonRevealed
+        ? el('button', {
+            className: 'btn btn-primary',
+            disabled: maratonSel === null,
+            onClick: () => {
+              if (maratonSel === null) return;
+              maratonRevealed = true;
+              const correct = maratonSel === q.correct;
+              maratonResults.push({ id: q.id, c: correct });
+              updateData(prev => ({
+                ...prev,
+                totalCorrect: prev.totalCorrect + (correct ? 1 : 0),
+                totalWrong: prev.totalWrong + (correct ? 0 : 1),
+                xp: prev.xp + (correct ? 10 : 2)
+              }));
+            }
+          }, 'Confirmar')
+        : el('div', { style: { display: 'flex', gap: '.75rem' } },
+            el('button', {
+              className: 'btn btn-primary',
+              onClick: () => {
+                if (maratonCurr + 1 >= maratonQuestions.length) {
+                  maratonFinished = true;
+                  updateData(prev => ({ ...prev, testsCompleted: prev.testsCompleted + 1, xp: prev.xp + 100 }));
+                } else {
+                  maratonCurr++; maratonSel = null; maratonRevealed = false; render();
+                }
+              }
+            }, maratonCurr + 1 >= maratonQuestions.length ? '🏁 Terminar' : 'Siguiente →'),
+            el('button', {
+              className: 'btn btn-ghost btn-sm',
+              onClick: () => {
+                // Finish early
+                maratonFinished = true;
+                updateData(prev => ({ ...prev, testsCompleted: prev.testsCompleted + 1, xp: prev.xp + 50 }));
+              }
+            }, 'Terminar ya')
+          )
+    )
+  );
+}
+
 // ========== MAIN RENDER ==========
 function render() {
   const root = document.getElementById('root');
@@ -1307,6 +1472,7 @@ function render() {
     case 'infinito': content = renderInfinite(); break;
     case 'flashcards': content = renderFlashcards(); break;
     case 'examen': content = renderExam(); break;
+    case 'maraton': content = renderMaraton(); break;
     case 'banco': content = renderBanco(); break;
     case 'stats': content = renderStats(); break;
     default: content = renderDashboard();
