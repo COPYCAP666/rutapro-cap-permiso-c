@@ -117,6 +117,33 @@ main{max-width:72rem;margin:0 auto;padding:1.5rem 1rem 2rem}
 .timer.danger{color:#ef4444}
 .timer.normal{color:#facc15}
 
+/* Streak badge */
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+@keyframes confettiBurst{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(-60px) rotate(360deg)}}
+.streak-badge{display:inline-flex;align-items:center;gap:.35rem;padding:.25rem .75rem;border-radius:9999px;font-size:.75rem;font-weight:700;font-family:'JetBrains Mono',monospace}
+.streak-badge.hot{background:rgba(249,115,22,.15);color:#fb923c;animation:pulse .6s ease-in-out}
+.streak-badge.fire{background:rgba(239,68,68,.15);color:#f87171;animation:pulse .4s ease-in-out}
+
+/* Difficulty dot */
+.diff-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;flex-shrink:0}
+.diff-easy{background:#4ade80}
+.diff-medium{background:#facc15}
+.diff-hard{background:#f87171}
+
+/* Review highlight */
+.review-tag{display:inline-block;padding:.125rem .5rem;border-radius:9999px;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+
+/* Keyboard shortcut hint */
+.key-hint{display:inline-flex;align-items:center;justify-content:center;width:1.25rem;height:1.25rem;border-radius:.25rem;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);font-size:.6rem;font-family:'JetBrains Mono',monospace;color:#6b7280;margin-right:.5rem;flex-shrink:0}
+
+/* Motivational toast */
+@keyframes toastIn{from{opacity:0;transform:translateY(20px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes toastOut{from{opacity:1}to{opacity:0;transform:translateY(-10px)}}
+.toast{position:fixed;bottom:6rem;left:50%;transform:translateX(-50%);z-index:100;padding:.75rem 1.5rem;border-radius:1rem;font-size:.85rem;font-weight:600;pointer-events:none;animation:toastIn .3s ease-out,toastOut .3s .9s ease-in forwards}
+.toast-ok{background:rgba(34,197,94,.9);color:#fff}
+.toast-streak{background:rgba(249,115,22,.9);color:#fff}
+.toast-wrong{background:rgba(239,68,68,.7);color:#fff}
+
 /* Stats */
 .stat-row{display:flex;justify-content:space-between;align-items:center;padding:.5rem 0}
 
@@ -664,8 +691,76 @@ function saveData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
 
 // ========== APP STATE ==========
 let appData = loadData();
+// Ensure new fields exist
+if (!appData.wrongIds) appData.wrongIds = {};  // {questionId: failCount}
+if (!appData.streak) appData.streak = 0;
+if (!appData.lastDate) appData.lastDate = '';
+if (!appData.todayCount) appData.todayCount = 0;
+if (!appData.bestStreak) appData.bestStreak = 0;
+saveData(appData);
+
 let currentPage = 'dashboard';
 let pageState = {};
+let currentStreak = 0;  // within-session streak
+let toastQueue = [];
+
+function showToast(text, type) {
+  const t = document.createElement('div');
+  t.className = 'toast toast-' + (type || 'ok');
+  t.textContent = text;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 1300);
+}
+
+function recordAnswer(qId, correct) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (appData.lastDate !== today) {
+    appData.lastDate = today;
+    appData.todayCount = 0;
+  }
+  appData.todayCount++;
+  appData.totalCorrect += correct ? 1 : 0;
+  appData.totalWrong += correct ? 0 : 1;
+  appData.xp += correct ? 10 : 2;
+
+  if (correct) {
+    currentStreak++;
+    if (appData.wrongIds[qId]) {
+      appData.wrongIds[qId]--;
+      if (appData.wrongIds[qId] <= 0) delete appData.wrongIds[qId];
+    }
+    if (currentStreak === 5) showToast('🔥 ¡Racha de 5!', 'streak');
+    else if (currentStreak === 10) showToast('🔥🔥 ¡Racha de 10! Imparable', 'streak');
+    else if (currentStreak === 20) showToast('🚀 ¡20 seguidas! Vas sobrado', 'streak');
+    else if (currentStreak % 25 === 0 && currentStreak > 0) showToast('👑 ¡' + currentStreak + ' seguidas! Legendario', 'streak');
+  } else {
+    if (currentStreak >= 5) showToast('Racha rota en ' + currentStreak, 'wrong');
+    currentStreak = 0;
+    appData.wrongIds[qId] = (appData.wrongIds[qId] || 0) + 1;
+  }
+
+  if (currentStreak > appData.bestStreak) appData.bestStreak = currentStreak;
+  appData.streak = currentStreak;
+  saveData(appData);
+}
+
+// Smart review: questions you've failed more, weighted random
+function getSmartReviewPool() {
+  const wrongIds = Object.keys(appData.wrongIds);
+  if (wrongIds.length === 0) return shuffle(QUESTIONS);
+  // 70% wrong questions, 30% random
+  const wrongQs = QUESTIONS.filter(q => appData.wrongIds[q.id]);
+  const rest = QUESTIONS.filter(q => !appData.wrongIds[q.id]);
+  const pool = [];
+  // Add wrong ones weighted by fail count
+  for (const q of wrongQs) {
+    const count = appData.wrongIds[q.id] || 1;
+    for (let i = 0; i < Math.min(count, 3); i++) pool.push(q);
+  }
+  // Add some random ones
+  const randomPick = shuffle(rest).slice(0, Math.max(10, Math.floor(pool.length * 0.4)));
+  return shuffle([...pool, ...randomPick]);
+}
 
 function updateData(updates) {
   if (typeof updates === 'function') {
@@ -676,6 +771,24 @@ function updateData(updates) {
   saveData(appData);
   render();
 }
+
+// Keyboard shortcuts (1-4 for options, Enter for confirm/next, Esc for back)
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  const key = e.key;
+  if (key >= '1' && key <= '4') {
+    const idx = parseInt(key) - 1;
+    const btns = document.querySelectorAll('.opt-btn:not(.locked)');
+    if (btns[idx]) btns[idx].click();
+  }
+  if (key === 'Enter') {
+    const primary = document.querySelector('.btn-primary:not([disabled])');
+    if (primary) primary.click();
+  }
+  if (key === 'Escape') {
+    if (currentPage !== 'dashboard') setPage('dashboard');
+  }
+});
 
 function setPage(p, state) {
   currentPage = p;
@@ -731,7 +844,10 @@ function iconSvg(name, size) {
     zap: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>`,
     card: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>`,
     infinite: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/></svg>`,
-    download: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>`
+    download: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>`,
+    target: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`,
+    trophy: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>`,
+    retry: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`
   };
   return icons[name] || '';
 }
@@ -799,15 +915,20 @@ function renderNav() {
 // ========== PAGES ==========
 
 function renderDashboard() {
-  const acc = (appData.totalCorrect + appData.totalWrong > 0)
-    ? Math.round((appData.totalCorrect / (appData.totalCorrect + appData.totalWrong)) * 100) : 0;
+  const tot = appData.totalCorrect + appData.totalWrong;
+  const acc = tot > 0 ? Math.round((appData.totalCorrect / tot) * 100) : 0;
+  const wrongCount = Object.keys(appData.wrongIds || {}).length;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayCount = appData.lastDate === today ? (appData.todayCount || 0) : 0;
+  const dailyGoal = 30;
+  const goalPct = Math.min(100, Math.round((todayCount / dailyGoal) * 100));
 
-  const stats = [
-    { l: 'Precisión', v: acc + '%', c: '#4ade80' },
-    { l: 'Tests', v: appData.testsCompleted, c: '#60a5fa' },
-    { l: 'Correctas', v: appData.totalCorrect, c: '#34d399' },
-    { l: 'XP', v: appData.xp, c: '#fb923c' }
-  ];
+  // SVG ring for daily goal
+  const ringSize = 80;
+  const ringR = 34;
+  const ringC = 2 * Math.PI * ringR;
+  const ringOffset = ringC - (goalPct / 100) * ringC;
+  const ringColor = goalPct >= 100 ? '#4ade80' : goalPct >= 50 ? '#facc15' : '#6b7280';
 
   const modes = [
     { id: 'examen', icon: 'zap', color: '#f87171', border: 'rgba(239,68,68,.2)', label: 'Examen', desc: '50 preguntas · 50 min' },
@@ -817,25 +938,60 @@ function renderDashboard() {
     { id: 'flashcards', icon: 'card', color: '#22d3ee', border: 'rgba(34,211,238,.2)', label: 'Cards', desc: 'Memorizar' }
   ];
 
+  // Add smart review if there are wrong questions
+  if (wrongCount > 0) {
+    modes.splice(2, 0, { id: 'repaso', icon: 'retry', color: '#f87171', border: 'rgba(239,68,68,.25)', label: 'Repaso', desc: wrongCount + ' preguntas falladas' });
+  }
+
   return el('div', { className: 'space-y-6 animate-fade', style: { maxWidth: '56rem', margin: '0 auto' } },
+    // Header with logo + count + daily ring
     el('div', { className: 'glass', style: { borderRadius: '1rem', padding: '1.5rem', borderColor: 'rgba(234,179,8,.2)' } },
-      el('h1', { className: 'font-display', style: { fontSize: '1.875rem', fontWeight: 700 } },
-        el('span', { style: { color: '#facc15' } }, 'RUTA'),
-        el('span', { style: { color: '#fff' } }, 'PRO')
-      ),
-      el('div', { style: { display: 'flex', alignItems: 'center', gap: '.75rem', marginTop: '.5rem' } },
-        el('span', { className: 'font-display', style: { fontSize: '1.5rem', fontWeight: 700, color: '#facc15' } }, String(QUESTIONS.length)),
-        el('span', { style: { color: '#6b7280', fontSize: '.875rem' } }, ' preguntas CAP integradas · Genérico + Mercancías')
+      el('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+        el('div', null,
+          el('h1', { className: 'font-display', style: { fontSize: '1.875rem', fontWeight: 700 } },
+            el('span', { style: { color: '#facc15' } }, 'RUTA'),
+            el('span', { style: { color: '#fff' } }, 'PRO')
+          ),
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '.75rem', marginTop: '.5rem' } },
+            el('span', { className: 'font-display', style: { fontSize: '1.5rem', fontWeight: 700, color: '#facc15' } }, String(QUESTIONS.length)),
+            el('span', { style: { color: '#6b7280', fontSize: '.875rem' } }, ' preguntas CAP integradas')
+          )
+        ),
+        // Daily goal ring
+        el('div', { style: { textAlign: 'center', position: 'relative' } },
+          (() => {
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', ringSize);
+            svg.setAttribute('height', ringSize);
+            svg.innerHTML = `
+              <circle cx="${ringSize/2}" cy="${ringSize/2}" r="${ringR}" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="5"/>
+              <circle cx="${ringSize/2}" cy="${ringSize/2}" r="${ringR}" fill="none" stroke="${ringColor}" stroke-width="5"
+                stroke-dasharray="${ringC}" stroke-dashoffset="${ringOffset}"
+                stroke-linecap="round" transform="rotate(-90 ${ringSize/2} ${ringSize/2})"
+                style="transition: stroke-dashoffset .5s ease"/>
+              <text x="${ringSize/2}" y="${ringSize/2 - 4}" text-anchor="middle" fill="${ringColor}" font-family="JetBrains Mono,monospace" font-weight="700" font-size="16">${todayCount}</text>
+              <text x="${ringSize/2}" y="${ringSize/2 + 12}" text-anchor="middle" fill="#6b7280" font-family="DM Sans,sans-serif" font-size="9">/ ${dailyGoal} hoy</text>
+            `;
+            return svg;
+          })()
+        )
       )
     ),
+    // Stats row with streak
     el('div', { className: 'grid-4' },
-      stats.map(s =>
+      [
+        { l: 'Precisión', v: acc + '%', c: acc >= 70 ? '#4ade80' : '#facc15' },
+        { l: 'Racha', v: (currentStreak || appData.streak || 0) + '🔥', c: '#fb923c' },
+        { l: 'Falladas', v: wrongCount, c: wrongCount > 0 ? '#f87171' : '#4ade80' },
+        { l: 'XP', v: appData.xp, c: '#60a5fa' }
+      ].map(s =>
         el('div', { className: 'glass stat-card' },
           el('div', { className: 'stat-label' }, s.l),
           el('div', { className: 'stat-val font-display', style: { color: s.c } }, String(s.v))
         )
       )
     ),
+    // Modes grid
     el('div', { className: 'grid-4' },
       modes.map(m => {
         const btn = el('button', {
@@ -850,6 +1006,10 @@ function renderDashboard() {
         btn.appendChild(el('p', null, m.desc));
         return btn;
       })
+    ),
+    // Keyboard hint
+    el('div', { style: { textAlign: 'center', padding: '.5rem', color: '#4b5563', fontSize: '.7rem' } },
+      '⌨️  Atajos: 1-4 opciones · Enter confirmar · Esc volver'
     )
   );
 }
@@ -941,12 +1101,8 @@ function renderTest() {
               testRevealed = true;
               const correct = testSel === q.correct;
               testResults.push({ id: q.id, c: correct });
-              updateData(prev => ({
-                ...prev,
-                totalCorrect: prev.totalCorrect + (correct ? 1 : 0),
-                totalWrong: prev.totalWrong + (correct ? 0 : 1),
-                xp: prev.xp + (correct ? 10 : 2)
-              }));
+              recordAnswer(q.id, correct);
+              render();
             }
           }, 'Confirmar')
         : el('button', {
@@ -1002,12 +1158,8 @@ function renderInfinite() {
           const ok = i === q.correct;
           infStats.c += ok ? 1 : 0;
           infStats.w += ok ? 0 : 1;
-          updateData(prev => ({
-            ...prev,
-            totalCorrect: prev.totalCorrect + (ok ? 1 : 0),
-            totalWrong: prev.totalWrong + (ok ? 0 : 1),
-            xp: prev.xp + (ok ? 10 : 2)
-          }));
+          recordAnswer(q.id, ok);
+          render();
         } }, el('span', { className: 'opt-letter' }, String.fromCharCode(65 + i) + '.'), ' ' + o);
       })
     ),
@@ -1173,50 +1325,113 @@ function renderExam() {
 // ========== BANCO ==========
 let bancoFilter = '';
 let bancoExpanded = null;
+let bancoPage = 1;
 
 function renderBanco() {
   const filtered = QUESTIONS.filter(q => q.q.toLowerCase().includes(bancoFilter.toLowerCase()));
+  const totalFiltered = filtered.length;
+  const showing = Math.min(bancoPage * 50, totalFiltered);
+  const hasMore = showing < totalFiltered;
+  const totalPages = Math.ceil(totalFiltered / 50);
+  const currentPageNum = Math.min(bancoPage, totalPages);
 
   const input = el('input', {
     className: 'search-input glass',
     type: 'text',
-    placeholder: 'Buscar pregunta...',
+    placeholder: '🔍 Buscar entre ' + QUESTIONS.length + ' preguntas...',
     value: bancoFilter
   });
-  input.addEventListener('input', (e) => { bancoFilter = e.target.value; render(); });
+  input.addEventListener('input', (e) => { bancoFilter = e.target.value; bancoPage = 1; render(); });
 
-  return el('div', { style: { maxWidth: '56rem', margin: '0 auto' }, className: 'space-y-4' },
-    input,
-    el('div', { style: { fontSize: '.75rem', color: '#6b7280' } }, filtered.length + ' / ' + QUESTIONS.length + ' preguntas'),
-    el('div', { className: 'space-y-2' },
-      filtered.slice(0, 50).map((q, idx) => {
-        const isOpen = bancoExpanded === idx;
-        const item = el('div', { className: 'glass banco-item' },
-          el('button', { className: 'banco-btn', onClick: () => { bancoExpanded = isOpen ? null : idx; render(); } },
-            el('div', { style: { flex: 1, minWidth: 0 } },
-              el('span', { style: { fontSize: '.75rem', color: '#4b5563' } }, '#' + (idx + 1) + ' '),
-              el('span', { style: { fontSize: '.875rem', color: '#fff' }, className: 'truncate' }, q.q)
-            ),
-            el('span', { style: { color: '#6b7280', transform: isOpen ? 'rotate(180deg)' : '', display: 'inline-block', transition: 'transform .2s' } }, '▾')
-          )
-        );
-        if (isOpen) {
-          const expand = el('div', { className: 'banco-expand' },
-            el('div', { style: { color: '#fff', marginBottom: '.5rem', fontSize: '.875rem' } }, q.q),
-            el('div', { className: 'space-y-2' },
-              q.options.map((o, i) =>
-                el('div', { className: 'banco-opt ' + (i === q.correct ? 'is-correct' : 'is-wrong') },
-                  String.fromCharCode(65 + i) + '. ' + o
-                )
+  // Build page items grouped visually by 50
+  const items = [];
+  const visible = filtered.slice(0, showing);
+
+  for (let g = 0; g < currentPageNum; g++) {
+    const start = g * 50;
+    const end = Math.min(start + 50, visible.length);
+    if (start >= visible.length) break;
+
+    const groupNum = g + 1;
+    const groupLabel = 'Bloque ' + groupNum + '  ·  Preguntas ' + (start + 1) + '-' + end;
+    const pctIcon = '📋';
+
+    // Group header
+    items.push(
+      el('div', { style: { display: 'flex', alignItems: 'center', gap: '.75rem', padding: '.75rem 0 .25rem', marginTop: g > 0 ? '1.5rem' : '0' } },
+        el('div', { style: { width: '3px', height: '1.5rem', borderRadius: '2px', background: ['#facc15','#60a5fa','#c084fc','#4ade80','#fb923c','#f87171','#22d3ee','#e879f9','#a3e635','#f472b6'][g % 10] } }),
+        el('span', { style: { fontSize: '.8rem', fontWeight: 700, color: ['#facc15','#60a5fa','#c084fc','#4ade80','#fb923c','#f87171','#22d3ee','#e879f9','#a3e635','#f472b6'][g % 10], letterSpacing: '.03em' } }, pctIcon + ' ' + groupLabel)
+      )
+    );
+
+    for (let idx = start; idx < end; idx++) {
+      const q = filtered[idx];
+      const isOpen = bancoExpanded === idx;
+      const item = el('div', { className: 'glass banco-item' },
+        el('button', { className: 'banco-btn', onClick: () => { bancoExpanded = isOpen ? null : idx; render(); } },
+          el('div', { style: { flex: 1, minWidth: 0 } },
+            el('span', { style: { fontSize: '.7rem', color: '#4b5563', fontFamily: 'monospace', marginRight: '.5rem' } }, '#' + (idx + 1)),
+            el('span', { style: { fontSize: '.875rem', color: '#fff' }, className: 'truncate' }, q.q)
+          ),
+          el('span', { style: { color: '#6b7280', transform: isOpen ? 'rotate(180deg)' : '', display: 'inline-block', transition: 'transform .2s', fontSize: '.75rem' } }, '▾')
+        )
+      );
+      if (isOpen) {
+        const expand = el('div', { className: 'banco-expand' },
+          el('div', { style: { color: '#fff', marginBottom: '.75rem', fontSize: '.9rem', lineHeight: '1.5' } }, q.q),
+          el('div', { className: 'space-y-2' },
+            q.options.map((o, i) =>
+              el('div', { className: 'banco-opt ' + (i === q.correct ? 'is-correct' : 'is-wrong') },
+                String.fromCharCode(65 + i) + '. ' + o
               )
             )
-          );
-          item.appendChild(expand);
-        }
-        return item;
-      }),
-      filtered.length > 50 ? el('div', { style: { textAlign: 'center', color: '#6b7280', fontSize: '.75rem', padding: '1rem' } }, 'Mostrando 50 de ' + filtered.length + '. Usa el buscador para filtrar.') : null
-    )
+          ),
+          q.explanation ? el('div', { style: { marginTop: '.75rem', padding: '.75rem', background: 'rgba(250,204,21,.08)', borderRadius: '.5rem', border: '1px solid rgba(250,204,21,.15)', fontSize: '.8rem', color: '#fbbf24', lineHeight: '1.5' } },
+            '💡 ' + q.explanation
+          ) : null
+        );
+        item.appendChild(expand);
+      }
+      items.push(item);
+    }
+  }
+
+  // Counter bar
+  const counterBar = el('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.5rem 0' } },
+    el('div', { style: { display: 'flex', alignItems: 'center', gap: '.5rem' } },
+      el('span', { className: 'font-display', style: { fontSize: '1.25rem', fontWeight: 700, color: '#facc15' } }, String(totalFiltered)),
+      el('span', { style: { fontSize: '.8rem', color: '#6b7280' } }, bancoFilter ? ' encontradas' : ' preguntas en el banco')
+    ),
+    el('div', { style: { fontSize: '.75rem', color: '#4b5563' } }, 'Mostrando ' + showing + ' de ' + totalFiltered)
+  );
+
+  // Progress bar of how much is loaded
+  const loadPct = (showing / totalFiltered) * 100;
+  const progressBar = el('div', { style: { height: '3px', borderRadius: '2px', background: 'rgba(255,255,255,.06)', marginBottom: '.5rem' } },
+    el('div', { style: { height: '100%', borderRadius: '2px', width: loadPct + '%', background: 'linear-gradient(90deg, #facc15, #f59e0b)', transition: 'width .3s' } })
+  );
+
+  // Load more button
+  const loadMoreBtn = hasMore ? el('button', {
+    className: 'glass',
+    style: {
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.75rem',
+      width: '100%', padding: '1rem', border: '1px solid rgba(250,204,21,.2)',
+      borderRadius: '.75rem', cursor: 'pointer', marginTop: '1rem',
+      background: 'rgba(250,204,21,.05)', transition: 'all .2s'
+    },
+    onClick: () => { bancoPage++; render(); }
+  },
+    el('span', { style: { fontSize: '.9rem', fontWeight: 600, color: '#facc15' } }, '▼  Cargar 50 más'),
+    el('span', { style: { fontSize: '.75rem', color: '#6b7280' } }, '(' + (totalFiltered - showing) + ' restantes)')
+  ) : el('div', { style: { textAlign: 'center', padding: '1rem', color: '#4ade80', fontSize: '.85rem' } }, '✓ Todas las preguntas cargadas');
+
+  return el('div', { style: { maxWidth: '56rem', margin: '0 auto' }, className: 'space-y-3' },
+    input,
+    counterBar,
+    progressBar,
+    el('div', { className: 'space-y-2' }, items),
+    loadMoreBtn
   );
 }
 
@@ -1224,24 +1439,59 @@ function renderBanco() {
 function renderStats() {
   const tot = appData.totalCorrect + appData.totalWrong;
   const acc = tot > 0 ? Math.round((appData.totalCorrect / tot) * 100) : 0;
+  const wrongCount = Object.keys(appData.wrongIds || {}).length;
+  const coverage = tot > 0 ? Math.min(100, Math.round((tot / QUESTIONS.length) * 100)) : 0;
+
+  // Top 5 most failed questions
+  const topFailed = Object.entries(appData.wrongIds || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([id, count]) => ({ q: QUESTIONS.find(q => q.id === parseInt(id)), count }))
+    .filter(x => x.q);
+
+  // Readiness assessment
+  let readiness = '❓ Sin datos';
+  let readinessColor = '#6b7280';
+  if (tot >= 50) {
+    if (acc >= 80 && wrongCount < 20) { readiness = '✅ Listo para el examen'; readinessColor = '#4ade80'; }
+    else if (acc >= 65) { readiness = '🟡 Casi listo — repasa las falladas'; readinessColor = '#facc15'; }
+    else { readiness = '🔴 Sigue estudiando'; readinessColor = '#f87171'; }
+  }
 
   return el('div', { style: { maxWidth: '48rem', margin: '0 auto' }, className: 'space-y-6' },
+    // Readiness banner
+    el('div', { className: 'glass', style: { borderRadius: '.75rem', padding: '1.25rem', textAlign: 'center', borderColor: readinessColor + '33' } },
+      el('div', { style: { fontSize: '1rem', fontWeight: 700, color: readinessColor, marginBottom: '.25rem' } }, readiness),
+      el('div', { style: { fontSize: '.75rem', color: '#6b7280' } }, 'Basado en ' + tot + ' respuestas · ' + coverage + '% del banco respondido')
+    ),
+    // Main stats
     el('div', { className: 'glass', style: { borderRadius: '.75rem', padding: '1.5rem' } },
-      el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '1rem' } },
-        el('div', { style: { textAlign: 'center' } },
-          el('div', { className: 'font-display', style: { fontSize: '1.875rem', fontWeight: 700, color: acc >= 70 ? '#4ade80' : '#facc15' } }, acc + '%'),
-          el('div', { style: { fontSize: '.75rem', color: '#6b7280' } }, 'Precisión')
-        ),
-        el('div', { style: { textAlign: 'center' } },
-          el('div', { className: 'font-display', style: { fontSize: '1.875rem', fontWeight: 700, color: '#4ade80' } }, String(appData.totalCorrect)),
-          el('div', { style: { fontSize: '.75rem', color: '#6b7280' } }, 'Correctas')
-        ),
-        el('div', { style: { textAlign: 'center' } },
-          el('div', { className: 'font-display', style: { fontSize: '1.875rem', fontWeight: 700, color: '#f87171' } }, String(appData.totalWrong)),
-          el('div', { style: { fontSize: '.75rem', color: '#6b7280' } }, 'Falladas')
-        )
+      el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '1rem' } },
+        ...[
+          { v: acc + '%', l: 'Precisión', c: acc >= 70 ? '#4ade80' : '#facc15' },
+          { v: String(appData.totalCorrect), l: 'Correctas', c: '#4ade80' },
+          { v: String(appData.totalWrong), l: 'Falladas', c: '#f87171' },
+          { v: String(appData.bestStreak || 0) + '🔥', l: 'Mejor racha', c: '#fb923c' }
+        ].map(s => el('div', { style: { textAlign: 'center' } },
+          el('div', { className: 'font-display', style: { fontSize: '1.5rem', fontWeight: 700, color: s.c } }, s.v),
+          el('div', { style: { fontSize: '.65rem', color: '#6b7280' } }, s.l)
+        ))
       )
     ),
+    // Top failed questions
+    topFailed.length > 0 ? el('div', { className: 'glass', style: { borderRadius: '.75rem', padding: '1.25rem' } },
+      el('h3', { style: { color: '#f87171', fontWeight: 700, fontSize: '.85rem', marginBottom: '.75rem' } }, '🎯 Top preguntas a repasar'),
+      el('div', { className: 'space-y-2' },
+        topFailed.map(({ q, count }) =>
+          el('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '.5rem', fontSize: '.8rem', padding: '.5rem', borderRadius: '.375rem', background: 'rgba(239,68,68,.05)' } },
+            el('span', { className: 'font-display', style: { color: '#f87171', fontSize: '.7rem', flexShrink: 0 } }, '×' + count),
+            el('span', { style: { color: '#d1d5db' } }, q.q.length > 80 ? q.q.slice(0, 80) + '...' : q.q)
+          )
+        )
+      ),
+      el('button', { className: 'btn btn-sm mt-2', style: { background: 'rgba(239,68,68,.1)', color: '#f87171', border: '1px solid rgba(239,68,68,.2)' }, onClick: () => { initRepaso(); setPage('repaso'); } }, '🎯 Repasar ahora')
+    ) : null,
+    // Data management
     el('div', { className: 'glass', style: { borderRadius: '.75rem', padding: '1.5rem' } },
       el('h3', { style: { color: '#fff', fontWeight: 700, marginBottom: '1rem' } }, 'Datos'),
       el('div', { style: { display: 'flex', gap: '.75rem', flexWrap: 'wrap' } },
@@ -1283,7 +1533,8 @@ function renderStats() {
           onClick: () => {
             if (confirm('¿Seguro que quieres borrar todos los datos?')) {
               localStorage.removeItem(STORAGE_KEY);
-              appData = { xp: 0, totalCorrect: 0, totalWrong: 0, testsCompleted: 0, cards: {}, sessions: [] };
+              appData = { xp: 0, totalCorrect: 0, totalWrong: 0, testsCompleted: 0, cards: {}, sessions: [], wrongIds: {}, streak: 0, lastDate: '', todayCount: 0, bestStreak: 0 };
+              currentStreak = 0;
               render();
             }
           }
@@ -1292,6 +1543,102 @@ function renderStats() {
     ),
     el('div', { style: { textAlign: 'center', fontSize: '.625rem', color: '#374151', marginTop: '2rem' } },
       '© 2026 RutaPro CAP · ' + QUESTIONS.length + ' preguntas'
+    )
+  );
+}
+
+// ========== SMART REVIEW (REPASO) MODE ==========
+let repasoQs = [];
+let repasoCurr = 0;
+let repasoSel = null;
+let repasoRev = false;
+let repasoStats = { c: 0, w: 0 };
+
+function initRepaso() {
+  repasoQs = getSmartReviewPool();
+  repasoCurr = 0; repasoSel = null; repasoRev = false; repasoStats = { c: 0, w: 0 };
+}
+
+function renderRepaso() {
+  const wrongCount = Object.keys(appData.wrongIds || {}).length;
+  if (wrongCount === 0) {
+    return el('div', { style: { maxWidth: '36rem', margin: '0 auto' } },
+      el('div', { className: 'glass', style: { borderRadius: '1rem', padding: '2rem', textAlign: 'center' } },
+        el('div', { style: { fontSize: '3.5rem', marginBottom: '1rem' } }, '🎉'),
+        el('h2', { className: 'font-display', style: { fontSize: '1.25rem', fontWeight: 700, color: '#4ade80' } }, '¡No tienes preguntas falladas!'),
+        el('p', { style: { color: '#9ca3af', fontSize: '.875rem', margin: '1rem 0' } }, 'Sigue practicando y las que falles aparecerán aquí para repasarlas.'),
+        el('button', { className: 'btn btn-primary btn-full', onClick: () => setPage('dashboard') }, 'Volver')
+      )
+    );
+  }
+
+  if (repasoQs.length === 0) initRepaso();
+  const q = repasoQs[repasoCurr % repasoQs.length];
+  const failCount = appData.wrongIds[q.id] || 0;
+
+  return el('div', { className: 'animate-fade', style: { maxWidth: '42rem', margin: '0 auto' } },
+    el('div', { className: 'glass mb-4', style: { borderRadius: '.5rem', padding: '.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+      el('div', { style: { display: 'flex', alignItems: 'center', gap: '.75rem' } },
+        el('span', { style: { fontSize: '.75rem', color: '#f87171', fontWeight: 700 } }, '🎯 REPASO INTELIGENTE'),
+        el('span', { style: { fontSize: '.7rem', color: '#6b7280' } }, wrongCount + ' pendientes')
+      ),
+      el('div', { style: { display: 'flex', gap: '1rem' } },
+        el('span', { style: { fontSize: '.75rem', color: '#4ade80' } }, '✓ ' + repasoStats.c),
+        el('span', { style: { fontSize: '.75rem', color: '#f87171' } }, '✗ ' + repasoStats.w)
+      )
+    ),
+    failCount > 0 ? el('div', { style: { marginBottom: '.5rem' } },
+      el('span', { className: 'review-tag', style: { background: 'rgba(239,68,68,.15)', color: '#f87171' } }, 'Fallada ' + failCount + (failCount === 1 ? ' vez' : ' veces'))
+    ) : null,
+    el('div', { className: 'glass q-card' }, el('h3', { className: 'q-text' }, q.q)),
+    el('div', { className: 'mb-6' },
+      q.options.map((o, i) => {
+        let cls = 'opt-btn';
+        if (repasoRev) {
+          cls += ' locked';
+          if (i === q.correct) cls += ' correct';
+          else if (i === repasoSel) cls += ' wrong';
+        } else if (i === repasoSel) cls += ' selected';
+        return el('button', { className: cls, onClick: () => {
+          if (repasoRev) return;
+          repasoSel = i; render();
+        } },
+          el('span', { className: 'key-hint' }, String(i + 1)),
+          el('span', { className: 'opt-letter' }, String.fromCharCode(65 + i) + '.'),
+          ' ' + o
+        );
+      })
+    ),
+    repasoRev ? el('div', { className: 'glass explanation' },
+      el('span', { style: { color: '#facc15', fontWeight: 700 } }, '💡 '),
+      el('span', { style: { color: '#fff' } }, q.explanation)
+    ) : null,
+    el('div', { className: 'flex-center' },
+      !repasoRev
+        ? el('button', {
+            className: 'btn btn-primary',
+            disabled: repasoSel === null,
+            onClick: () => {
+              if (repasoSel === null) return;
+              repasoRev = true;
+              const ok = repasoSel === q.correct;
+              repasoStats.c += ok ? 1 : 0;
+              repasoStats.w += ok ? 0 : 1;
+              recordAnswer(q.id, ok);
+              render();
+            }
+          }, 'Confirmar')
+        : el('button', {
+            className: 'btn btn-primary',
+            onClick: () => {
+              repasoCurr++; repasoSel = null; repasoRev = false;
+              // Re-check if all wrong are cleared
+              if (Object.keys(appData.wrongIds).length === 0) {
+                repasoQs = [];
+              }
+              render();
+            }
+          }, 'Siguiente →')
     )
   );
 }
@@ -1423,12 +1770,8 @@ function renderMaraton() {
               maratonRevealed = true;
               const correct = maratonSel === q.correct;
               maratonResults.push({ id: q.id, c: correct });
-              updateData(prev => ({
-                ...prev,
-                totalCorrect: prev.totalCorrect + (correct ? 1 : 0),
-                totalWrong: prev.totalWrong + (correct ? 0 : 1),
-                xp: prev.xp + (correct ? 10 : 2)
-              }));
+              recordAnswer(q.id, correct);
+              render();
             }
           }, 'Confirmar')
         : el('div', { style: { display: 'flex', gap: '.75rem' } },
@@ -1473,6 +1816,7 @@ function render() {
     case 'flashcards': content = renderFlashcards(); break;
     case 'examen': content = renderExam(); break;
     case 'maraton': content = renderMaraton(); break;
+    case 'repaso': content = renderRepaso(); break;
     case 'banco': content = renderBanco(); break;
     case 'stats': content = renderStats(); break;
     default: content = renderDashboard();
